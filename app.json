@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Eco Pulse",
+    "slug": "ecopulse",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#07100D"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.ecopulse.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to snap photos of your food for CO₂ analysis.",
+        "NSLocationWhenInUseUsageDescription": "Used to track transport routes for carbon footprint calculation.",
+        "NSPhotoLibraryUsageDescription": "Used to select photos for your eco story."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#07100D"
+      },
+      "package": "com.ecopulse.app",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        { "cameraPermission": "Used to snap food photos for CO₂ analysis." }
+      ],
+      [
+        "expo-location",
+        { "locationWhenInUsePermission": "Used to track your transport routes." }
+      ]
+    ],
+    "scheme": "ecopulse",
+    "extra": {
+      "supabaseUrl": "YOUR_SUPABASE_URL",
+      "supabaseAnonKey": "YOUR_SUPABASE_ANON_KEY"
+    }
+  }
+}
