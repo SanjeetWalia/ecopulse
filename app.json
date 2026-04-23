@@ -12,14 +12,16 @@
       "backgroundColor": "#07100D"
     },
     "ios": {
-      "supportsTablet": false,
-      "bundleIdentifier": "com.ecopulse.app",
-      "infoPlist": {
-        "NSCameraUsageDescription": "Used to snap photos of your food for CO₂ analysis.",
-        "NSLocationWhenInUseUsageDescription": "Used to track transport routes for carbon footprint calculation.",
-        "NSPhotoLibraryUsageDescription": "Used to select photos for your eco story."
-      }
-    },
+  "supportsTablet": false,
+  "bundleIdentifier": "com.ecopulse.app",
+  "buildNumber": "1",
+  "infoPlist": {
+    "ITSAppUsesNonExemptEncryption": false,
+    "NSCameraUsageDescription": "Used to snap photos of your food for CO₂ analysis.",
+    "NSLocationWhenInUseUsageDescription": "Used to track transport routes for carbon footprint calculation.",
+    "NSPhotoLibraryUsageDescription": "Used to select photos for your eco story."
+  }
+},
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -29,7 +31,11 @@
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
-        "READ_EXTERNAL_STORAGE"
+        "READ_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -38,17 +44,25 @@
     "plugins": [
       [
         "expo-camera",
-        { "cameraPermission": "Used to snap food photos for CO₂ analysis." }
+        {
+          "cameraPermission": "Used to snap food photos for CO₂ analysis."
+        }
       ],
       [
         "expo-location",
-        { "locationWhenInUsePermission": "Used to track your transport routes." }
+        {
+          "locationWhenInUsePermission": "Used to track your transport routes."
+        }
       ]
     ],
     "scheme": "ecopulse",
     "extra": {
       "supabaseUrl": "YOUR_SUPABASE_URL",
-      "supabaseAnonKey": "YOUR_SUPABASE_ANON_KEY"
-    }
+      "supabaseAnonKey": "YOUR_SUPABASE_ANON_KEY",
+      "eas": {
+        "projectId": "91f13541-b306-4363-9771-6970382b2410"
+      }
+    },
+    "owner": "ecopulsewithsanjeet"
   }
 }
