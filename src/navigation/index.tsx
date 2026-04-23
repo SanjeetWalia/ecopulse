@@ -1,161 +1,121 @@
-// src/navigation/index.tsx
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import { useAuthStore } from '../lib/authStore';
 import { Colors, Typography } from '../constants/theme';
-
-// Auth screens
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
-import SignUpScreen from '../screens/auth/SignUpScreen';
+import PhoneScreen from '../screens/auth/PhoneScreen';
+import OTPVerifyScreen from '../screens/auth/OTPVerifyScreen';
+import ProfileSetupScreen from '../screens/auth/ProfileSetupScreen';
 import SignInScreen from '../screens/auth/SignInScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
-
-// Main screens (placeholders — we'll build these next)
 import HomeScreen from '../screens/home/HomeScreen';
 import ExploreScreen from '../screens/explore/ExploreScreen';
 import SnapScreen from '../screens/activity/SnapScreen';
 import ProfileScreen from '../screens/home/ProfileScreen';
 import SettingsScreen from '../screens/home/SettingsScreen';
-
-// Detail screens
+import HabitsScreen from '../screens/habits/HabitsScreen';
 import ActivityDetailScreen from '../screens/activity/ActivityDetailScreen';
 import LogActivityScreen from '../screens/activity/LogActivityScreen';
 import GiftPlantScreen from '../screens/gift/GiftPlantScreen';
 import MessagesScreen from '../screens/messages/MessagesScreen';
+import WeeklyWrappedScreen from '../screens/home/WeeklyWrappedScreen';
+import MomentsFeedScreen from '../screens/home/MomentsFeedScreen';
+import CarbonChallengeScreen from '../screens/home/CarbonChallengeScreen';
 import ConversationScreen from '../screens/messages/ConversationScreen';
 
-const AuthStack = createNativeStackNavigator();
-const MainStack = createNativeStackNavigator();
+const A = createNativeStackNavigator();
+const M = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// ─── Tab Icons ────────────────────────────────────────────────────────────────
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
-  const icons: Record<string, string> = {
-    Home: '⌂',
-    Explore: '◉',
-    Snap: '◎',
-    Profile: '○',
-    Settings: '⊞',
-  };
+const ICONS: Record<string, string> = { Home:'⌂', Explore:'◉', Snap:'◎', Profile:'○', Habits:'🌿' };
+
+function TabBar({ state, navigation }: any) {
   return (
-    <View style={[tabStyles.iconWrap, focused && tabStyles.iconWrapActive]}>
-      <Text style={[tabStyles.icon, focused && tabStyles.iconActive]}>
-        {icons[name] ?? '○'}
-      </Text>
+    <View style={s.barOuter}>
+      <View style={s.bar}>
+        {state.routes.filter((r: any) => r.name !== 'Explore').map((route: any, i: number) => {
+          const focused = state.index === i;
+          return (
+            <TouchableOpacity
+              key={route.key}
+              style={s.tabItem}
+              onPress={() => navigation.navigate(route.name)}
+              activeOpacity={0.7}
+            >
+              <View style={[s.iconWrap, focused && s.iconWrapOn]}>
+                <Text style={[s.icon, focused && s.iconOn]}>{ICONS[route.name]}</Text>
+              </View>
+              <Text style={[s.lbl, focused && s.lblOn]}>{route.name}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
-// ─── Main Tabs ────────────────────────────────────────────────────────────────
 function MainTabs() {
-  const insets = useSafeAreaInsets();
-
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: 'rgba(7,16,13,0.96)',
-          borderTopWidth: 0.5,
-          borderTopColor: Colors.border,
-          paddingBottom: insets.bottom + 4,
-          paddingTop: 6,
-          height: 56 + insets.bottom,
-        },
-        tabBarIcon: ({ focused }) => (
-          <TabIcon name={route.name} focused={focused} />
-        ),
-        tabBarLabel: ({ focused }) => (
-          <Text style={[tabStyles.label, focused && tabStyles.labelActive]}>
-            {route.name}
-          </Text>
-        ),
-      })}
-    >
+    <Tab.Navigator tabBar={(p) => <TabBar {...p} />} screenOptions={{ headerShown: false }}>
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
       <Tab.Screen name="Snap" component={SnapScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
+      <Tab.Screen name="Habits" component={HabitsScreen} />
     </Tab.Navigator>
   );
 }
 
-// ─── Main Stack (tabs + modals) ───────────────────────────────────────────────
-function MainNavigator() {
+function MainNav() {
   return (
-    <MainStack.Navigator screenOptions={{ headerShown: false }}>
-      <MainStack.Screen name="Tabs" component={MainTabs} />
-      <MainStack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
-      <MainStack.Screen name="LogActivity" component={LogActivityScreen}
-        options={{ presentation: 'modal' }} />
-      <MainStack.Screen name="GiftPlant" component={GiftPlantScreen}
-        options={{ presentation: 'card' }} />
-      <MainStack.Screen name="Messages" component={MessagesScreen}
-        options={{ presentation: 'card' }} />
-      <MainStack.Screen name="Conversation" component={ConversationScreen}
-        options={{ presentation: 'card' }} />
-    </MainStack.Navigator>
+    <M.Navigator screenOptions={{ headerShown: false }}>
+      <M.Screen name="Tabs" component={MainTabs} />
+      <M.Screen name="ActivityDetail" component={ActivityDetailScreen} />
+      <M.Screen name="LogActivity" component={LogActivityScreen} options={{ presentation: 'modal' }} />
+      <M.Screen name="GiftPlant" component={GiftPlantScreen} />
+      <M.Screen name="Messages" component={MessagesScreen} />
+      <M.Screen name="Conversation" component={ConversationScreen} />
+      <M.Screen name="WeeklyWrapped" component={WeeklyWrappedScreen} options={{ presentation: 'modal' }} />
+      <M.Screen name="MomentsFeed" component={MomentsFeedScreen} />
+      <M.Screen name="CarbonChallenge" component={CarbonChallengeScreen} options={{ presentation: 'modal' }} />
+    </M.Navigator>
   );
 }
 
-// ─── Auth Stack ───────────────────────────────────────────────────────────────
-function AuthNavigator() {
+function AuthNav() {
   return (
-    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
-      <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
-      <AuthStack.Screen name="SignUp" component={SignUpScreen} />
-      <AuthStack.Screen name="SignIn" component={SignInScreen} />
-      <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-    </AuthStack.Navigator>
+    <A.Navigator screenOptions={{ headerShown: false }}>
+      <A.Screen name="Welcome" component={WelcomeScreen} />
+      <A.Screen name="Phone" component={PhoneScreen} />
+      <A.Screen name="OTPVerify" component={OTPVerifyScreen} />
+      <A.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+      <A.Screen name="SignIn" component={SignInScreen} />
+      <A.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+    </A.Navigator>
   );
 }
 
-// ─── Root Navigator ───────────────────────────────────────────────────────────
 export default function RootNavigator() {
   const { session, initialized } = useAuthStore();
-
-  if (!initialized) return null; // Splash screen handles loading state
-
+  if (!initialized) return null;
   return (
     <NavigationContainer>
-      {session ? <MainNavigator /> : <AuthNavigator />}
+      {session ? <MainNav /> : <AuthNav />}
     </NavigationContainer>
   );
 }
 
-const tabStyles = StyleSheet.create({
-  iconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconWrapActive: {
-    backgroundColor: 'rgba(200,244,90,0.12)',
-  },
-  icon: {
-    fontSize: 16,
-    color: Colors.tx3,
-  },
-  iconActive: {
-    color: Colors.lime,
-  },
-  label: {
-    fontFamily: Typography.headingMedium,
-    fontSize: 7,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    color: Colors.tx3,
-    marginTop: 2,
-  },
-  labelActive: {
-    color: Colors.lime,
-  },
+const s = StyleSheet.create({
+  barOuter: { width: '100%', alignItems: 'center', backgroundColor: Colors.bg },
+  bar: { width: 390, maxWidth: '100%', flexDirection: 'row', backgroundColor: 'rgba(7,16,13,0.97)', borderTopWidth: 0.5, borderTopColor: 'rgba(200,244,90,0.1)', paddingVertical: 6, height: 58 },
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  iconWrap: { width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  iconWrapOn: { backgroundColor: 'rgba(200,244,90,0.12)' },
+  icon: { fontSize: 16, color: Colors.tx3 },
+  iconOn: { color: Colors.lime },
+  lbl: { fontFamily: Typography.headingBold, fontSize: 8, color: Colors.tx3, textTransform: 'uppercase', letterSpacing: 0.3 },
+  lblOn: { color: Colors.lime },
 });

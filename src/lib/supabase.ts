@@ -1,18 +1,9 @@
-// src/lib/supabase.ts
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
 
-const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl ?? '';
-const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey ?? '';
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
-    '⚠️  Supabase credentials missing. Add SUPABASE_URL and SUPABASE_ANON_KEY to app.json extras.'
-  );
-}
-
+const supabaseUrl = 'https://yzeslhdoviwahtunthor.supabase.co';
+const supabaseAnonKey = 'sb_publishable_kqx9TcHF9Eu36OGkjA85UQ_oqGHTKah';
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
@@ -22,29 +13,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// ─── Auth helpers ─────────────────────────────────────────────────────────────
-
-export async function signUpWithEmail(
-  email: string,
-  password: string,
-  fullName: string,
-  username: string
-) {
+export async function signUpWithEmail(email: string, password: string, fullName: string, username: string) {
   const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { full_name: fullName, username },
-    },
+    email, password,
+    options: { data: { full_name: fullName, username } },
   });
   return { data, error };
 }
 
 export async function signInWithEmail(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   return { data, error };
 }
 

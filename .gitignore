@@ -2,3 +2,25 @@ node_modules/
 .expo/
 dist/
 .env.local
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Backups
+*.backup
+*.bak
+
+# Env files
+.env
+.env.*.local
+
+# VS Code (optional — tracking these is fine too, your call)
+.vscode/*.log

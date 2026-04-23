@@ -36,7 +36,6 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router",
       [
         "expo-camera",
         { "cameraPermission": "Used to snap food photos for CO₂ analysis." }
