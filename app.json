@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#07100D"
+      "backgroundColor": "#D7EBD7"
     },
     "ios": {
   "supportsTablet": false,
@@ -25,7 +25,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#07100D"
+        "backgroundColor": "#D7EBD7"
       },
       "package": "com.ecopulse.app",
       "permissions": [
