@@ -1,318 +1,401 @@
 # Eco Pulse — Launch Roadmap
 
 **Status:** Pre-launch · Building toward TestFlight beta
-**TestFlight beta date:** Saturday, May 16, 2026
-**Global launch target:** Wednesday, June 17, 2026 (astrologically auspicious window is June 15–22; ship when ready, not before)
+**Target TestFlight date:** Saturday, May 16, 2026 (revisable each Sunday)
+**Target global launch:** Wednesday, June 17, 2026 (revisable each Sunday)
 **Owner:** Sanjeet Walia (solo founder)
-**Last updated:** April 23, 2026
+**Last updated:** April 24, 2026 (v5 — end of heavy build day; Moko-Avi K3 landed; Week 1 substantially complete)
+
+---
+
+## 🌱 Product vision: what this app becomes
+
+**The thesis:** the app has to be for the user first; only then do we gather insights for corporate reporting.
+
+User value → retention → data density → B2B credibility. Reversing the chain produces a tool users abandon, which leaves corporations with sparse data that proves nothing.
+
+### What Eco Pulse is becoming
+
+A behavioral coach for low-carbon living, modeled on Oura's observe → interpret → coach → reinforce loop. The user doesn't return to see a number. They return because the app helps them live the way they want to live.
+
+### Four-phase behavior loop
+
+1. **Observe** — passively collect carbon-relevant behavior (Plaid, Google Timeline, Snap, manual logs) over ~10 days to build a personal baseline.
+2. **Interpret** — turn raw behavior into patterns and meaning. Moko-Avi is the interpretation layer: "Your footprint dropped 12% this week, mostly because you biked Tuesday through Thursday." **Minimum version shipped in v1 (K3).**
+3. **Coach** — specific, timely nudges based on observed patterns. v1.2+.
+4. **Reinforce** — the avatar evolves based on behavior, not activity count. v1.1+.
+
+### Current state vs. target
+
+| Dimension | v0 (pre-4/23) | v1 (shipping now) | v1.1-1.3 (Fall 2026) | v2 (2027+) |
+|---|---|---|---|---|
+| Measurement | CO₂e per activity | CO₂e + smart formatting + timezone-correct summaries | Same + reference points ($, % vs avg) | Same |
+| Interpretation | None | 🟢 **Moko-Avi K3 shipped** — 10-day warmup, warm day summary | Proactive insights, pattern detection | Predictive |
+| Coaching | None | None (on roadmap) | Specific nudges | Personalized coaching plans |
+| Reinforcement | Streak only | Streak + Moko-Avi | Avatar evolution (Living Friend basic) | Living Friend fully |
+| Data sources | Manual, Snap | Manual, Snap, edit/delete | + Google Timeline, Plaid, Apple Health, weather | + bank aggregation, IoT |
+| B2B offering | None | None | Sustainability Dashboard (v1 case studies) | Primary revenue |
 
 ---
 
 ## How to use this document
 
-- Work top to bottom within each section
-- Items are tagged: 🔴 Critical · 🟡 Should fix · 🟢 Quality / growth · ⚠️ Decide
-- Check off items as you complete them — this is the canonical source of truth
-- Don't jump ahead until all 🔴 items in the current section are done
-- If the global launch date (June 17) slips, cut from the bottom, not the top
+- Top to bottom within each section
+- Tags: 🔴 Critical · 🟡 Should fix · 🟢 Quality / growth · ⚠️ Decide
+- Dates are targets, not contracts — revise every Sunday
+- If launch slips, cut from the bottom
 
 ---
 
-## Context for this timeline
+## 🗓️ Sunday Planning Ritual
 
-Previous placeholder was April 28, which would have required cramming 8+ weeks of work into 6 days. New timeline, confirmed April 22, gives you:
+15 min every Sunday evening:
+1. Open this file
+2. Check off what shipped
+3. Move or cut what didn't
+4. Pick 3-5 items for the week
+5. If 2+ weeks of slippage, reset target launch date
+6. Write one sentence at the bottom: "Week of [date]: what I learned"
 
-- **~3.5 weeks** to TestFlight beta (May 16)
-- **~4 weeks** of beta testing + iteration with 20 invitees
-- **~8 weeks total** to global public launch (June 17)
-
-This is realistic, not aspirational. It lets us fix things properly, iterate on real user feedback, and ship a product worth launching.
-
----
-
-## 🔴 SECTION A — Ship-blocking bugs (from critique)
-
-These must be fixed before TestFlight on May 16. Every one of these will destroy a beta tester's experience within their first 5 minutes of use.
-
-- [ ] A1. Fix navigation bar hit-target offset (tap on Snap opens Profile, etc.)
-- [ ] A2. Fix infinite loading spinners on Profile and Habits screens — add real timeout, error state, retry
-- [ ] A3. Add confirmation step before re-logging a "Recent" activity (prevents accidental duplicates)
-- [ ] A4. Deduplicate entries in Moments feed (db-level or display-level)
-- [ ] A5. Decide on Messages stub (hide from nav, or build a proper "coming soon" state — see X2)
-- [ ] A6. Decide on Gift a Plant stub (hide Home card, or build proper coming soon — see X2)
-- [ ] A7. Fix or remove the "Your Story" avatar tap on Home (currently does nothing)
-- [ ] A8. Fix or remove the "SW" header avatar tap (currently does nothing)
-- [ ] A9. Fix Day tab stale data issue on refresh (shows 9.4 kg CO₂ from a duplicate-logged activity that was never deleted)
-- [ ] A10. Add "edit/delete logged activity" capability — currently no way to undo a bad log
+Skip the ritual 2 weeks in a row → pace is wrong.
 
 ---
 
-## 🔴 SECTION B — TestFlight technical setup
+## 📝 Observations log
 
-### Prerequisites
-- [x] Apple Developer enrollment paid ($99, active since April 22)
-- [x] Supabase Edge Functions live (analyze-food-photo, analyze-activity)
-- [x] Anthropic key moved server-side
+See `OBSERVATIONS.md` at repo root for the running list (OBS-001 through OBS-008 as of April 24). Triaged into ROADMAP during Sunday ritual.
 
-### Setup
-- [ ] B1. Verify App Store Connect loads with Apps tab (appstoreconnect.apple.com)
-- [ ] B2. `eas login`
-- [ ] B3. `eas init` in project root (adds projectId to app.json)
-- [ ] B4. Write `eas.json` with `preview` and `production` build profiles
-- [ ] B5. Add `ITSAppUsesNonExemptEncryption: false` to app.json ios.infoPlist
-- [ ] B6. Add `buildNumber: "1"` to app.json ios section
-- [ ] B7. Add EAS secrets for Supabase URL + anon key (if env-vars needed at build time)
-- [ ] B8. `eas build --platform ios --profile preview`
-- [ ] B9. `eas submit --platform ios` → App Store Connect
-- [ ] B10. Wait for TestFlight review to pass (typically <24 hrs)
-- [ ] B11. Self-test TestFlight build on your own iPhone before inviting anyone
-- [ ] B12. Add 20 EcoKey invitees as external testers in App Store Connect
+**Active pending items from observations:**
+- OBS-006 — keyboard hides chat input on Log Activity (bug, high priority, blocks primary input)
+- OBS-007 — Claude can't resolve "since 7 am till now" (needs current time in system prompt)
+
+---
+
+## 🔴 SECTION A — Ship-blocking bugs
+
+- [x] A1. Navigation tab hit-target offset — **FIXED** (commit `647a6fc`)
+- [ ] A2. Infinite loading spinners on Profile and Habits (timeout + retry + error state)
+- [x] A3. Confirmation before re-logging Recent activity — **FIXED** (April 24)
+- [ ] A4. Deduplicate Moments feed
+- [ ] A5. Decide on Messages stub (see X2)
+- [ ] A6. Decide on Gift a Plant stub (see X2)
+- [x] A7. "Your Story" avatar tap — **FIXED** (removed dead affordance)
+- [x] A8. "SW" header avatar tap — **FIXED** (routes to Profile now)
+- [ ] A9. Day tab stale data on refresh
+- [x] A10. Edit/delete logged activity — **FULL FEATURE SHIPPED** (April 24, commit `eca09a9`)
+- [x] A11. Splash freeze on cold launch — **FIXED** (April 23, commit `fe8466c`)
+- [ ] A12. Baseline error reporting (Sentry free tier)
+- [ ] **A13. Keyboard hides chat input on LogActivityScreen** (OBS-006 — high priority, blocks primary input flow)
+- [ ] **A14. analyze-activity edge function doesn't know current time** (OBS-007 — inject ISO timestamp + timezone into system prompt)
+
+---
+
+## 🔴 SECTION B — TestFlight + EAS pipeline
+
+- [x] B1-B11 Complete — EAS pipeline, first build, submission, installation, splash fix, resubmission all done
+- [x] B12 Ready to add invitees (pending launch date)
+
+### ⚠️ B13. iOS 26 SDK upgrade required by April 28
+Current builds use `image: "latest"` workaround. Proper SDK 54 upgrade unavoidable for April 28+.
+
+- [ ] Weekend session with rollback branch
+- [ ] Upgrade Expo 51 → 54+
+- [ ] Test web + simulator + TestFlight rebuild
+- [ ] Must be done before any post-April-28 rebuild
 
 ---
 
 ## 🔴 SECTION C — Apple compliance
 
-Non-negotiable for Apple review, regardless of launch date.
-
-- [ ] C1. Verify TestFlight build is a production bundle (not dev mode). EAS preview profile should handle this; confirm in build logs.
-- [ ] C2. Build full Delete Account flow on Profile screen (not a stub — self-serve deletion required for public App Store)
-- [ ] C3. Camera permission rationale screen before iOS system prompt (Snap screen)
-- [ ] C4. Privacy policy URL live at `tryecopulse.com/privacy` and linked from onboarding + settings
-- [ ] C5. Terms of service URL live at `tryecopulse.com/terms` and linked from onboarding
-- [ ] C6. Configure App Store listing metadata: screenshots (6.7" + 6.1"), app description, keywords, category, support URL, marketing URL
-- [ ] C7. App icon in all required sizes (1024x1024 master + auto-generated via Expo)
+- [ ] C1. Verify TestFlight is production bundle
+- [ ] C2. Full Delete Account flow (self-serve required for public launch)
+- [ ] C3. Camera permission rationale screen
+- [ ] C4. Privacy policy at tryecopulse.com/privacy
+- [ ] C5. Terms of service at tryecopulse.com/terms
+- [ ] C6. App Store listing metadata (screenshots, description, keywords)
+- [ ] C7. App icon all sizes (Expo handles)
+- [ ] C8. Rename app from "Eco Pulse (b640cf)" to final name (see X7)
 
 ---
 
 ## 🔴 SECTION D — Security
 
-From the critique + our audit.
-
-- [ ] D1. Audit Supabase Row Level Security policies on every table: `activities`, `profiles`, `waitlist`, `invite_codes`, and any others. Each user-data table needs a policy like `user_id = auth.uid()`. Test by trying to query another user's data with a valid JWT.
-- [ ] D2. Audit production bundle for any remaining hardcoded secrets (Anthropic is clean; verify no other API keys leaked)
-- [ ] D3. Privacy gate on Moments feed — decide approach per X3, then implement
-- [ ] D4. Revisit Supabase Edge Function `--no-verify-jwt` flag. Check if Supabase has shipped ES256 support to edge runtime. If yes, redeploy functions without the flag.
-- [ ] D5. Set billing alerts on Anthropic console — monthly spend cap + alert threshold. Opus calls on Snap aren't free; a viral week could spike the bill.
-- [ ] D6. Check Supabase free tier limits — database size, edge function invocations, auth users. Set alerts before hitting 80% of any limit.
-
----
-
-## 🟡 SECTION E — Remaining critique items (should fix)
-
-- [ ] E1. Character limit and fallback message for Log Activity when AI can't parse input
-- [ ] E2. Explain "CO₂e" on first encounter (tooltip or tap-to-learn)
-- [ ] E3. Clarify leaderboard scope labels — "#3 friends" vs "#7 Frisco" — consistent or explained
-- [ ] E4. Explain the "✦ 19% below avg" badge on Home (compared to what?)
-- [ ] E5. Reconcile streak counter inconsistency between Day tab (12-day) and Habits tab (1d best)
-- [ ] E6. Audit all async screens and add timeout + retry UX (beyond just Profile/Habits)
+- [ ] D1. Audit Supabase RLS on every table
+- [ ] D2. Audit production bundle for hardcoded secrets
+- [ ] D3. Moments feed privacy gate
+- [ ] D4. Revisit Edge Function `--no-verify-jwt` flag
+- [ ] D5. Billing alerts: Anthropic + Supabase ($25/$50/$100 thresholds)
+- [ ] D6. File US trademark for "Eco Pulse" (~$250-350)
+- [ ] D7. Remove placeholder `YOUR_SUPABASE_URL` from app.json extra block
 
 ---
 
-## 🟡 SECTION F — Quiz funnel improvements
+## 🟡 SECTION E — Should-fix
 
-- [ ] F1. Update waitlist confirmation copy to name June 17 launch date
-- [ ] F2. Make Share the primary CTA after waitlist submit (currently buried)
-- [ ] F3. Tighten share text — shorter, hookier
-- [ ] F4. Add UTM tracking — read `?utm_source=` from URL, save to waitlist row
-- [ ] F5. Add "Learn more about Eco Pulse →" cross-link from quiz to landing page
-- [ ] F6. Verify or fix "2,400+ people have seen their mirror" social proof counter (X4)
+- [ ] E1. Character limit + fallback message when AI can't parse
+- [ ] E2. "CO₂e" first-encounter explainer (see K2)
+- [ ] E3. Clarify leaderboard scope labels
+- [ ] E4. Explain "✦ 19% below avg" badge
+- [ ] E5. Reconcile streak counter inconsistency
+- [ ] E6. Audit async screens for timeout + retry UX
 
 ---
 
-## 🟢 SECTION G — Growth / virality (now feasible with 8-week timeline)
+## 🟡 SECTION F — Quiz funnel
 
-Items previously deferred to v2, now back in scope because we have the time.
+- [ ] F1-F6 — unchanged from v4
 
-- [ ] G1. Invite-to-friend waitlist mechanic — user gets position ("#287 on list"), each referral moves them up 10 spots. The k-factor unlock from the product strategy doc.
-- [ ] G2. Image-based share card for IG Stories — Spotify Wrapped style, visual result with user's annual lbs CO₂e
-- [ ] G3. Different share text per network (iMessage vs WhatsApp vs Twitter)
-- [ ] G4. Settings page — edit name, avatar, username
+---
+
+## 🟢 SECTION G — Growth / virality
+
+- [ ] G1-G4 — unchanged from v4
+
+---
+
+## 🟢 SECTION I — Cross-partisan Tier 1
+
+- [ ] I1. Dollars-saved parallel readout (overlaps K1)
+- [ ] I2. Unit picker (dollars / CO₂ / gallons / trees)
+- [ ] I3. Rename "ESG Dashboard" → "Sustainability Dashboard"
+- [ ] I4. Local gas price integration (stretch)
+
+---
+
+## 🟢 SECTION J — Moko-Avi agent
+
+**v1 scope:**
+- [x] **J1. Edge function `moko-avi-summary`** — **SHIPPED** April 24. Reads today's activities + 14-day summary history, warmup-gated (10 consecutive days), returns warm non-prescriptive sentence via Claude Haiku.
+- [x] **J2. Home screen entry point** — **SHIPPED** April 24. Teal card between hero and Gift-a-Plant, renders warmup/ready/empty states.
+- [x] **J4. Summary card UI with styling** — **SHIPPED** April 24. Inline in HomeScreen, matches app visual language.
+- [ ] J3. In-app knowledge layer — Moko-Avi explains app metrics (CO₂e definition, badges, streaks). Deferred to post-launch.
+
+**v1.1+:**
+- Weather integration ("rainy day — streaming was longer than usual")
+- Visual wrap cards (Spotify-Wrapped style)
+- IG Stories / iMessage share formatting
+- Proactive coaching (insights without being asked)
+- Population comparisons
+- What-if simulations
+- General climate facts
+
+---
+
+## 🟢 SECTION K — Reference points everywhere
+
+CO₂e alone is inert data. Every number needs a comparator.
+
+**v1 scope:**
+- [ ] K1. Every CO₂e number shows dollars saved / trend arrow / comparison to average (overlaps I1)
+- [ ] K2. First-time CO₂e tooltip explaining what good vs. bad looks like
+- [x] **K3. Day tab "So what?" one-liner** — **SHIPPED via Moko-Avi J1+J2** April 24. Moko-Avi's sentence is the K3 implementation.
+
+**v1.1+:**
+- Personal baseline (10-day rolling average)
+- Pattern detection per user
 
 ---
 
 ## 🟡 SECTION H — Marketing + social
 
-### Account setup
-- [ ] H1. Reserve Instagram handle (@ecopulse, @trypulse, @ecopulse.app — whichever is available)
-- [ ] H2. Reserve TikTok handle
-- [ ] H3. Set up `hello@tryecopulse.com` via domain email forwarding
-
-### Tracking
-- [ ] H4. Install Meta Pixel on tryecopulse.com
-- [ ] H5. Configure Meta Pixel conversion event on waitlist submission
-
-### Content creation
-- [ ] H6. Record 60-second founder video — iPhone, unpolished, your face. "I'm Sanjeet. I built Eco Pulse because..."
-- [ ] H7. Prepare 8-10 Instagram posts across the 8-week runway (cadence: 1/week pre-launch, 2-3/week near launch)
-- [ ] H8. Prepare 5-6 TikTok videos — informal, authentic
-- [ ] H9. Prepare 3-4 LinkedIn posts from your personal account
-
-### Paid campaign ($100 total)
-- [ ] H10. Configure Meta Ads — single campaign, single ad set, single creative. Target: SF + LA metros, 28-40, climate interests. Budget: $7/day × 14 days. Objective: waitlist Conversions via pixel.
-- [ ] H11. Launch Meta ad ~2 weeks before global launch (starts ~June 3)
-
-### Launch comms
-- [ ] H12. Write invite email for 20 EcoKey holders (send day of TestFlight launch, May 16)
-- [ ] H13. Write public launch announcement for global launch day (June 17)
-
-### App Store Optimization (ASO)
-- [ ] H14. Research top keywords for carbon tracking apps — check what Klima, Joulebug, Commons, Capture target
-- [ ] H15. Write App Store description using those keywords naturally (don't stuff)
-- [ ] H16. Create 5 App Store screenshots that sell the concept, not the UI — each screenshot needs a headline and benefit callout
-- [ ] H17. Write 100-character subtitle (the key ASO field most people miss)
-- [ ] H18. Pick primary + secondary App Store categories (Health & Fitness is saturated; Productivity or Lifestyle may convert better)
+Unchanged from v4 — H1-H14.
 
 ---
 
 ## ⚠️ SECTION X — Decisions needed
 
-Make these calls before building the related items. Not urgent tonight, but don't start related work without deciding.
-
-- [ ] X1. Explore tab — keep hidden for beta, or enable? (Currently hidden in nav)
-- [ ] X2. Messages + Gift stubs — hide completely, or build proper "coming soon" states? Recommend hiding for TestFlight beta (takes ~15 min), revisit for global launch.
-- [ ] X3. Moments feed privacy — real names default, pseudonyms default, or opt-in during onboarding?
-- [ ] X4. "2,400+ seen their mirror" quiz counter — real number, or placeholder? If placeholder, fix or remove before any paid ads drive traffic.
-- [ ] X5. Hours/day available to work on this — determines whether the May 16 TestFlight date is comfortable or tight
-- [ ] X6. Any pre-TestFlight users who should get early access (friends, family, beta testers before the 20 EcoKey invitees)
+- [ ] X1. Explore tab — keep hidden for beta or enable?
+- [ ] X2. Messages + Gift stubs — hide or "coming soon"?
+- [ ] X3. Moments feed privacy — real names / pseudonyms / opt-in?
+- [ ] X4. "2,400+" counter — real or placeholder?
+- [ ] X5. Hours/day available through launch
+- [ ] X6. Pre-TestFlight early access?
+- [ ] X7. Final app name for App Store
+- [ ] X8. Household mode v1 or v1.1? (Recommended: v1.1)
 
 ---
 
-## 📅 8-Week sequencing plan
+## 📅 8-Week target sequencing
 
-The macro plan. Each week has a focus area so you don't context-switch constantly.
+Revised every Sunday.
 
-### Week 1 (Apr 23 – Apr 29) — Critical bugs + EAS setup
-**Focus:** Fix the bugs that would immediately break beta testing. Get EAS building.
+### Week 1 (Apr 23 – Apr 29) — Critical bugs + foundations ✅ **substantially complete**
 
-- A1 (navigation hit-target bug) — highest impact single fix
-- A2 (loading spinners with timeout + retry)
-- A3 (re-log confirmation)
-- A9, A10 (data integrity — edit/delete activities)
-- B1 through B4 (EAS setup + config)
-- ⚠️ Make decisions X1, X2, X3, X4
+**Shipped:**
+- [x] EAS pipeline end-to-end (B1-B11)
+- [x] A1 navigation, A3 re-log confirmation, A7 Your Story, A8 avatar, A10 full timeline+edit+delete, A11 splash freeze
+- [x] Production DB migration: timezone-aware daily_summaries (recompute trigger for INSERT/UPDATE/DELETE)
+- [x] formatCo2 smart rounding
+- [x] Device timezone sync on auth
+- [x] Moko-Avi K3: edge function + client module + Home card + cache invalidation
+- [x] OBSERVATIONS.md process established
 
-### Week 2 (Apr 30 – May 6) — Finish bugs, first build
-**Focus:** Complete remaining critique items. First EAS build.
+**Carried into Week 2:**
+- [ ] A13 (keyboard hides input — OBS-006)
+- [ ] A14 (current time to Claude — OBS-007)
+- [ ] B13 (SDK 54 upgrade — weekend session)
+- [ ] D6 (file US trademark)
+- [ ] D7 (cleanup app.json placeholders)
+- [ ] A12 (baseline error reporting / Sentry)
+- [ ] X1-X4, X7 decisions
 
-- A4 (dedup Moments)
-- A5, A6 (stub screens — per X2 decision)
-- A7, A8 (dead avatar taps)
-- B5 through B9 (app.json config + first build + submit)
-- D1 (RLS audit — important before any build reaches users)
-- D2 (bundle secret audit)
+### Week 2 (Apr 30 – May 6) — SDK upgrade + bug polish
+- [ ] ⚠️ **SDK 54 upgrade** (weekend, rollback branch)
+- [ ] A13 keyboard fix
+- [ ] A14 current time injection
+- [ ] A2 loading spinners with timeout
+- [ ] A4, A5, A6, A9
+- [ ] Second EAS build + resubmit on SDK 54
+- [ ] D1, D2, D5
+- [ ] A12 Sentry
 
-### Week 3 (May 7 – May 13) — Compliance + security + polish
-**Focus:** Make the build Apple-compliant. Security tight. Smooth rough edges.
-
-- C1, C2, C3, C4, C5 (Apple compliance must-haves)
-- D3 (Moments privacy gate per X3)
-- E1 through E6 (the critique "should fix" items)
-- B11 (self-test first TestFlight build on your iPhone)
-- Any build reshoots required
+### Week 3 (May 7 – May 13) — Compliance + reference points
+- [ ] C1, C2, C3, C4, C5 Apple compliance
+- [ ] D3 Moments privacy
+- [ ] E1-E6 should-fix
+- [ ] **K1 (dollars-saved everywhere) + K2 (CO₂e explainer)**
+- [ ] B12 prep invite templates
 
 ### Week 4 (May 14 – May 20) — TestFlight beta launches 🚀
-**Focus:** Ship to 20 invitees. Start collecting feedback.
+- **Target Saturday May 16**
+- [ ] B12 add 20 external testers
+- [ ] H12 invite email sent
+- [ ] Daily monitoring
 
-- **Saturday May 16: TestFlight launch**
-- B12 (add 20 invitees as external testers)
-- H12 (invite email sent day-of)
-- Daily monitoring of feedback + bug reports
-- Start collecting what's working and what isn't
+### Week 5 (May 21 – May 27) — Beta iteration + Tier 1
+- [ ] Ship fixes from beta
+- [ ] New build mid-week
+- [ ] **I1, I2, I3** Tier 1 cross-partisan
+- [ ] G1 waitlist referrals
 
-### Week 5 (May 21 – May 27) — Iterate on beta feedback
-**Focus:** Fix what real testers found. Build virality features.
+### Week 6 (May 28 – Jun 3) — Quiz + marketing
+- [ ] F1-F6, G2-G4
+- [ ] H1-H5 accounts + Meta Pixel
+- [ ] H6 founder video
+- [ ] I4 gas prices (stretch)
 
-- Ship fixes from beta feedback (expect 5-10 bug reports)
-- New build submitted mid-week
-- G1 (invite-to-friend waitlist mechanic — the k-factor play)
-- G2 (image-based share card for IG Stories)
+### Week 7 (Jun 4 – Jun 10) — Content + buzz
+- [ ] H7-H9 content
+- [ ] H10-H11 Meta ad live
+- [ ] C6 App Store metadata
 
-### Week 6 (May 28 – Jun 3) — Buffer + marketing prep
-**Focus:** If on track, polish + start ads. If behind, catch up. This is your one buffer week — use it.
-
-- If on schedule: F1 through F6 (quiz improvements), G3/G4 (share text, settings page), H1–H5 (social accounts, Meta Pixel)
-- If behind: use this week to finish any Section A-E items you didn't get to. Ads + social can shift to Week 7.
-- H6 (founder video recorded) — do this regardless, it's the highest-ROI single asset
-
-### Week 7 (Jun 4 – Jun 10) — Content + pre-launch buzz
-**Focus:** Start organic content drumbeat. Launch paid ad. Start ASO prep.
-
-- H7, H8, H9 (post content on schedule)
-- H10, H11 (Meta ad live, ~2 weeks runway)
-- H14 through H18 (ASO — research, description, screenshots, subtitle, category)
-- C6, C7 (App Store listing metadata + icon sizes)
-- Second beta iteration build if needed
-
-### Week 8 (Jun 11 – Jun 17+) — Launch week
-**Focus:** Submit for App Store review. Launch when ready within the June 15–22 window.
-
-- Submit production build to App Store (allow 48 hrs; first submissions often bounce once)
-- H13 (launch announcement written)
-- Organic content ramps up (post every 1-2 days)
-- **Launch target: Wednesday June 17.** If review delays or polish needs more time, the astrological window extends through June 22. Better to ship ready than ship on a specific date.
-- Launch day push: IG, TikTok, LinkedIn post, Meta ad continues, monitor reviews, respond fast
+### Week 8 (Jun 11 – Jun 17) — Launch week
+- [ ] Submit production build (48-hr lead)
+- [ ] H13 announcement
+- **Target Wednesday June 17: Global launch**
 
 ---
 
 ## Definition of Done
 
-### For TestFlight beta (May 16)
-- All 🔴 Section A, B, C, D items checked
-- Build installed and working on your own iPhone for 48 hrs without blocking bugs
-- 20 invitees can install and complete: login → snap a photo → log via chat → see result → share
+### TestFlight beta (target May 16)
+- All 🔴 Section A, B, C, D items
+- SDK 54 upgrade complete
+- **Moko-Avi shipped ✅** (already done)
+- Reference points on numbers (K1 minimum)
+- Build working on personal iPhone 48+ hrs without blocking bugs
+- 20 invitees can: login → snap → log → edit → delete → see result → share → understand result
 
-### For global launch (June 17)
+### Global launch (target June 17)
 - Above PLUS:
-- All 🟡 Section E, F items checked
-- Meta Pixel fires correctly on waitlist submission
-- At least 100 waitlist signups from quiz funnel
-- Founder video posted on at least 2 channels
-- Invite-to-friend mechanic working (G1)
-- App Store listing approved and live
+- All 🟡 E, F
+- All 🟢 I, J, K items
+- Meta Pixel firing on waitlist
+- ≥100 waitlist signups
+- Founder video on 2+ channels
+- G1 working
+- App Store listing approved
 - No known crashes in last 2 weeks of beta
-
-Everything else is bonus.
 
 ---
 
-## 🌱 Post-launch roadmap (reference, not scope)
+## 🌱 Post-launch roadmap
 
-Major features that ship after global launch:
+### v1.1 — July/August 2026 (flagship: Household + avatar + Moko-Avi visuals)
+- Household mode (3-4 weeks)
+- Personal baseline (Moko-Avi speaks in user's own terms)
+- Avatar evolution v1 (precursor to Living Friend)
+- Moko-Avi visual wraps (Spotify-Wrapped-style share cards)
+- Walking & biking via Apple Health
+- "What this app knows about you" transparency dashboard
+- Repair log
 
-- **Google Timeline integration** — passive transport tracking (Sprint 6B). Product moat.
-- **Plaid integration** — green receipts, #1 retention driver per user research
-- **Living Friend Avatars** — plants grow with friendship duration (Sprint 9). Spec already written.
-- **Carbon credit wallet + marketplace** — Stripe Connect, user earnings
-- **Corporate ESG dashboard** — per-employee SaaS, near-term revenue
-- **Behavior vector platform** — anonymized cohort data licensed to green brands
+### v1.2 — Fall 2026 (the coach phase)
+- **Moko-Avi coaching** — proactive insights without being asked
+- **Moko-Avi weather integration** (user location + Open-Meteo/OpenWeatherMap)
+- Pattern detection (best/worst days, trigger events, seasonal shifts)
+- What-if simulations
+- **Google Timeline integration** — 90-day retroactive onboarding, OAuth + Takeout fallback, passive transport tracking
+- **Plaid integration** — green receipts (#1 retention driver)
 
-These are NOT launch items. Listed here so they stay visible.
+### v1.3+ / v2 — 2027
+- Living Friend Avatars fully (Sprint 9)
+- Land & Water stewardship section
+- Local-impact mapping
+- Self-sufficiency score
+- Carbon credit wallet + marketplace (Stripe Connect)
+- Sustainability Dashboard B2B (per-employee SaaS)
+- Behavior vector platform
+
+### Explicitly deferred or rejected
+- Food quality layer on Snap
+- Buy-local filter
+- Offline-only mode
+- Kids mode (ships with household mode)
+
+---
+
+## Revenue projections (Month 12 MRR, June 2027)
+
+| Scenario | Consumer subs | B2B dashboard | Family plan | **Total MRR** |
+|---|---|---|---|---|
+| A. Current roadmap only | $160-640 | $0-2,500 | $0 | **$160 – $3,140** |
+| B. + Tier 1 cross-partisan (I) | $320-960 | $2,500-15,000 | $0 | **$2,820 – $15,960** |
+| C. + Moko-Avi + Reference points (J, K) | $800-2,400 | $3,500-20,000 | $0 | **$4,300 – $22,400** |
+| D. + Household mode v1.1 | $1,500-5,000 | $5,000-30,000 | $500-2,500 | **$7,000 – $37,500** |
+
+Note: numbers are directional, not forecast. The thesis (user value → retention → data density → B2B credibility) holds regardless of exact numbers.
 
 ---
 
 ## Notes on astrological timing
 
-Launch dates were chosen based on consultation with Rahasya Veda (April 22, 2026). Per their guidance:
-
-- Beta launch on a **Saturday** (to appease Saturn) → Saturday, May 16
-- Global launch on a **Wednesday** → Wednesday, June 17
-- Their recommended "Super-Day" window: June 15–22, 2026
-- Their reasoning: Mars Digbala, Mercury Mahadasha supported by Jupiter Antardasha, 4th house alignment with environmental/ecological ventures
-
-*This document lives at the root of the Eco Pulse repo. Edit it as items complete. After global launch, archive to `/docs/roadmap-v1-launch.md` and start v2.*
+- Saturday May 16 (TestFlight) — per Rahasya Veda consultation
+- Wednesday June 17 (Global) — Super-Day window June 15-22
+- Dates are targets, not contracts.
 
 ---
 
-## 🔁 Weekly ritual — do not skip
+## Weekly learning log
 
-Every Sunday evening, 15 minutes:
+### Week of April 23, 2026
+**Built EAS pipeline from zero to first TestFlight submission in one evening.** Hit iOS 26 SDK wall (fixed with `image: "latest"` stopgap; full SDK 54 upgrade unavoidable before April 28).
 
-1. Open this file
-2. Check off items completed during the week
-3. Honestly note which items slipped and why
-4. Update the current week's focus section if the plan has drifted
-5. Confirm whether next week's focus still makes sense or needs rework
+**Splash freeze on first install** — `onLayout`-triggered `SplashScreen.hideAsync()` fires once before async init completes. Fixed via `useEffect` keyed on `appReady` state + 8s safety timeout. Lesson: first contact with reality always surfaces bugs no critique document found. Sunday ritual + weekly self-test is the catch mechanism.
 
-This ritual is the difference between a useful plan and a plan that becomes archaeology by Week 3. Without it, scope creeps, deadlines slip silently, and Week 8 arrives with half the critical items undone.
+**Clarified product vision during self-test:** the app as-shipped is a measurement tool. Oura-style interpretation layer (Moko-Avi + reference points) is what makes numbers mean something. Without it, CO₂e is inert data.
 
-Also: **take one full day off per week.** No app work. Sunday after the ritual, or Saturday — pick one and defend it. Solo-founder burnout is the #1 launch killer, and prevention is cheaper than recovery.
+**Corrected causal chain:** user value → retention → data → B2B credibility.
+
+### Week of April 24, 2026 (today — heavy build day)
+**Shipped 4 bug fixes + A10 full feature + production DB migration + Moko-Avi K3 in ~7 hours.** 11 commits total.
+
+**Daily summaries trigger redesign.** Old incremental `update_daily_summary` only fired on INSERT and would double-count or drift on UPDATE/DELETE. Replaced with `recompute_daily_summary` that reads all activities for the affected user+date and writes a full aggregate. Self-healing; works identically for INSERT/UPDATE/DELETE. Then made timezone-aware — added `profiles.timezone`, rewrote to use `AT TIME ZONE` per user. Two production migrations in one session; both verified by invariant-check (sum of activities = sum of summaries).
+
+**Moko-Avi K3 landed.** Edge function reads user data, checks 10-day warmup, calls Claude Haiku with a warm non-prescriptive voice prompt. Client module caches with 10-min TTL, invalidates on any activity write. HomeScreen renders a teal card between hero and Gift-a-Plant showing warmup progress (3/10 days currently) or the generated sentence once the user hits 10 consecutive days. Tested end-to-end; warmup state confirmed on device.
+
+**Lessons:**
+- Two prod migrations in one session is the maximum safe dose. Would not have survived a third today.
+- Feature additions mid-session are the pattern to watch. Weather and Timeline API were legitimate adds in spirit, wrong timing for today.
+- The Sunday ritual's "honest recalibration" is what keeps solo founders shippable. Without it, hours compound into unsustainable pace.
+- "The app doesn't feel impressive" observation is the vision pointing at the roadmap. Moko-Avi K3 landing today is the first step toward fixing it — many more to go.
+
+---
+
+## Change log
+
+- **April 22 (v1):** Created. 8-week timeline.
+- **April 23 early evening (v2):** EAS pipeline built. Section I added. B13 SDK 54. Revenue table.
+- **April 23 evening (v3):** Section J (Moko-Avi) added. Sunday ritual added. Dates reframed as targets.
+- **April 23 night (v4):** Product vision section at top. Section K (reference points) added. OBS-001 through OBS-005 logged. Post-launch restructured around behavior loop phases.
+- **April 24 (v5):** Week 1 substantially checked off. A10 + A11 complete. DB migration to timezone-aware summaries. Moko-Avi K3 (J1, J2, J4) shipped — also satisfies K3. A13, A14 added to Section A from OBS-006, OBS-007. Weather integration moved to v1.2. Timeline API remains v1.2.
