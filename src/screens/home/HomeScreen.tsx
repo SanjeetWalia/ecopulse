@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../lib/authStore';
 import { supabase } from '../../lib/supabase';
 import { formatCo2 } from '../../lib/format';
+import { fetchMokoAviSummary, MokoAviResult, invalidateMokoAviCache } from '../../lib/mokoAvi';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 
 const STORIES = [
@@ -50,6 +51,7 @@ export default function HomeScreen({ navigation }: any) {
   const [activeStory, setActiveStory] = useState<string | null>(null);
   const [realScore, setRealScore] = useState<string | null>(null);
   const [realTiles, setRealTiles] = useState<any[] | null>(null);
+  const [mokoAvi, setMokoAvi] = useState<MokoAviResult>({ status: 'loading', summary: null });
   const liveAnim = useRef(new Animated.Value(1)).current;
 
   const data = PERIOD_DATA[period];
@@ -89,7 +91,16 @@ export default function HomeScreen({ navigation }: any) {
 
   // Refresh score every time home screen is focused
   useFocusEffect(useCallback(() => { fetchTodayScore(); }, [fetchTodayScore]));
-
+  // Fetch Moko-Avi summary only when viewing the Day tab
+  useFocusEffect(useCallback(() => {
+    if (!profile?.id || period !== 'day') return;
+    let cancelled = false;
+    setMokoAvi({ status: 'loading', summary: null });
+    fetchMokoAviSummary(profile.id).then(res => {
+      if (!cancelled) setMokoAvi(res);
+    });
+    return () => { cancelled = true; };
+  }, [profile?.id, period]));
   useEffect(() => {
     Animated.loop(Animated.sequence([
       Animated.timing(liveAnim, { toValue: 0.3, duration: 1000, useNativeDriver: false }),
@@ -191,6 +202,30 @@ export default function HomeScreen({ navigation }: any) {
           {period === 'day' && <View style={{ flexDirection: 'row', justifyContent: 'center', paddingVertical: 5, borderTopWidth: 0.5, borderTopColor: 'rgba(200,244,90,0.06)' }}><Text style={{ fontFamily: Typography.headingMedium, fontSize: 8, color: Colors.tx3 }}>📋 Tap to see today's activities</Text></View>}
         </TouchableOpacity>
 
+        {/* MOKO-AVI */}
+        {period === 'day' && mokoAvi.status !== 'empty' && mokoAvi.status !== 'error' && (
+          <View style={s.mokoCard}>
+            <View style={s.mokoIconWrap}>
+              <Text style={s.mokoIcon}>🌱</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.mokoLabel}>Moko-Avi</Text>
+              {mokoAvi.status === 'loading' && (
+                <Text style={s.mokoText}>…</Text>
+              )}
+              {mokoAvi.status === 'warmup' && (
+                <Text style={s.mokoText}>
+                  Moko-Avi is still learning about you.
+                  {typeof mokoAvi.consecutive_days === 'number' && ` (${mokoAvi.consecutive_days}/10 days)`}
+                </Text>
+              )}
+              {mokoAvi.status === 'ready' && mokoAvi.summary && (
+                <Text style={s.mokoText}>{mokoAvi.summary}</Text>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* GIFT A PLANT */}
         <TouchableOpacity style={s.giftCard} onPress={() => navigation.navigate('GiftPlant')} activeOpacity={0.85}>
           <View style={{ position: 'absolute', top: -30, right: -30, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(200,244,90,0.07)' }} />
@@ -275,6 +310,46 @@ const s = StyleSheet.create({
   addBtn: { position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, borderRadius: 8, backgroundColor: Colors.lime, borderWidth: 1.5, borderColor: Colors.bg, justifyContent: 'center', alignItems: 'center' },
   storyName: { fontFamily: Typography.headingMedium, fontSize: 8, color: Colors.tx2, textAlign: 'center' },
   heroCard: { marginHorizontal: 10, marginTop: 5, backgroundColor: Colors.bg3, borderWidth: 0.5, borderColor: Colors.border2, borderRadius: 20, overflow: 'hidden', position: 'relative' },
+  mokoCard: {
+    marginHorizontal: 10,
+    marginTop: 6,
+    marginBottom: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(45,212,191,0.06)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(45,212,191,0.22)',
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+  },
+  mokoIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(45,212,191,0.14)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 1,
+  },
+  mokoIcon: {
+    fontSize: 11,
+  },
+  mokoLabel: {
+    fontFamily: Typography.headingBold,
+    fontSize: 8,
+    color: Colors.teal,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  mokoText: {
+    fontFamily: Typography.body,
+    fontSize: 11,
+    color: Colors.tx,
+    lineHeight: 14,
+  },
   heroGlow: { position: 'absolute', top: -40, right: -40, width: 140, height: 140, borderRadius: 70, backgroundColor: 'rgba(200,244,90,0.07)' },
   giftCard: { marginHorizontal: 10, marginTop: 7, borderRadius: 18, overflow: 'hidden', borderWidth: 0.5, borderColor: 'rgba(200,244,90,0.35)', backgroundColor: '#0D2A10', position: 'relative' },
   logWidget: { marginHorizontal: 10, marginTop: 7, borderRadius: 16, backgroundColor: Colors.bg2, borderWidth: 0.5, borderColor: Colors.border, padding: 11, flexDirection: 'row', alignItems: 'center', gap: 10 },

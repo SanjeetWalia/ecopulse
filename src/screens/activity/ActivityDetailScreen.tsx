@@ -11,6 +11,7 @@
 //   - Refetches on focus, so returning from Home shows latest state.
 
 import { supabase } from '../../lib/supabase';
+import { invalidateMokoAviCache } from '../../lib/mokoAvi';
 import { formatCo2 } from '../../lib/format';
 import React, { useCallback, useState } from 'react';
 import {
@@ -94,6 +95,7 @@ export default function ActivityDetailScreen({ navigation }: any) {
               return;
             }
             // Refetch to reflect change
+            invalidateMokoAviCache(profile?.id || '');
             fetchActivities();
           },
         },
@@ -215,6 +217,7 @@ export default function ActivityDetailScreen({ navigation }: any) {
           onClose={() => setEditingActivity(null)}
           onSaved={() => {
             setEditingActivity(null);
+            invalidateMokoAviCache(profile?.id || '');
             fetchActivities();
           }}
         />

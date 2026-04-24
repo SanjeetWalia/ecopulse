@@ -1,3 +1,4 @@
+import { invalidateMokoAviCache } from '../../lib/mokoAvi';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, StatusBar, ActivityIndicator, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -98,6 +99,7 @@ export default function LogActivityScreen({ navigation }: any) {
     await supabase.from('activities').insert({ user_id: profile.id, category: result.category, activity_type: result.activity_type, label: result.label, amount: Math.abs(result.co2_kg), unit: 'kg', co2_kg: Math.abs(result.co2_kg), source: pending ? 'pending' : 'ai', logged_at: new Date().toISOString() });
     if (pending) setPendingCount(p => p + 1);
     loadRecentActivities();
+    invalidateMokoAviCache(profile.id);
   };
 
   const savePendingFromText = (text: string) => {
