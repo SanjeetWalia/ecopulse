@@ -115,7 +115,7 @@ export default function HomeScreen({ navigation }: any) {
               <Text style={{ fontSize: 14 }}>💬</Text>
               <View style={s.notifDot} />
             </TouchableOpacity>
-            <TouchableOpacity style={[s.iconBtn, { backgroundColor: Colors.sf2 }]} onPress={() => signOut()}>
+            <TouchableOpacity style={[s.iconBtn, { backgroundColor: Colors.sf2 }]} onPress={() => navigation.navigate('Profile')}>
               <Text style={{ fontFamily: Typography.headingBold, fontSize: 10, color: Colors.lime }}>{initials}</Text>
             </TouchableOpacity>
           </View>
@@ -123,17 +123,16 @@ export default function HomeScreen({ navigation }: any) {
 
         {/* STORIES */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.storiesScroll} contentContainerStyle={{ paddingHorizontal: 10, paddingVertical: 4 }}>
-          <TouchableOpacity style={s.storyWrap}>
-            <View style={[s.storyRing, { borderWidth: 1.5, borderColor: 'rgba(200,244,90,0.35)', borderStyle: 'dashed', backgroundColor: 'transparent' }]}>
+          <View style={s.storyWrap}>
+            <View style={[s.storyRing, { borderWidth: 1.5, borderColor: 'rgba(200,244,90,0.2)', backgroundColor: 'transparent' }]}>
               <View style={s.storyInner}>
                 <View style={[s.storyAv, { backgroundColor: Colors.sf2 }]}>
                   <Text style={[s.storyInit, { color: Colors.lime }]}>{initials}</Text>
                 </View>
               </View>
-              <View style={s.addBtn}><Text style={{ fontSize: 8, color: '#071810', fontWeight: '900' }}>+</Text></View>
             </View>
-            <Text style={[s.storyName, { color: Colors.tx3 }]}>Your story</Text>
-          </TouchableOpacity>
+            <Text style={[s.storyName, { color: Colors.tx3 }]}>You</Text>
+          </View>
           {STORIES.map(st => (
             <TouchableOpacity key={st.id} style={s.storyWrap} onPress={() => setActiveStory(st.id)}>
               <LinearGradient colors={st.seen ? [Colors.sf2, Colors.sf2] : ['#C8F45A', '#2DD4BF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.storyRing}>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, StatusBar, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, StatusBar, ActivityIndicator, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -166,11 +166,28 @@ export default function LogActivityScreen({ navigation }: any) {
     sendMessage(r);
   };
 
-  const handleRecentTap = async (act: any) => {
-    const result = { label: act.label, co2_kg: act.co2_kg, category: act.category, activity_type: act.activity_type };
-    await saveActivity(result);
-    setMessages(prev => [...prev, { role: 'user' as const, text: `Log ${act.label.split('·')[0].trim()} again` }, { role: 'assistant' as const, text: `${act.icon} Done! Logged again.`, logResult: result, quickReplies: ['Log another', 'Done'] }]);
-  };
+  const handleRecentTap = (act: any) => {
+  const labelShort = act.label.split('·')[0].trim();
+  Alert.alert(
+    'Log this again?',
+    `${act.icon} ${labelShort} (${act.co2_kg.toFixed(1)} kg CO₂e)`,
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log it',
+        onPress: async () => {
+          const result = { label: act.label, co2_kg: act.co2_kg, category: act.category, activity_type: act.activity_type };
+          await saveActivity(result);
+          setMessages(prev => [
+            ...prev,
+            { role: 'user' as const, text: `Log ${labelShort} again` },
+            { role: 'assistant' as const, text: `${act.icon} Done! Logged again.`, logResult: result, quickReplies: ['Log another', 'Done'] }
+          ]);
+        },
+      },
+    ]
+  );
+};
 
   return (
     <View style={s.root}>
