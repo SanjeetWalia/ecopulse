@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '../../lib/authStore';
 import { supabase } from '../../lib/supabase';
+import { formatCo2 } from '../../lib/format';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 
 const STORIES = [
@@ -68,12 +69,12 @@ export default function HomeScreen({ navigation }: any) {
       .single();
 
     if (summary) {
-      setRealScore((summary.total_co2_kg ?? 0).toFixed(1));
+      setRealScore(formatCo2(summary.total_co2_kg));
       setRealTiles([
-        { icon: '🗺️', name: 'Transport', val: `${(summary.transport_co2 ?? 0).toFixed(1)} kg` },
-        { icon: '🍽️', name: 'Food',      val: `${(summary.food_co2 ?? 0).toFixed(1)} kg` },
-        { icon: '🌡️', name: 'Energy',    val: `${(summary.energy_co2 ?? 0).toFixed(1)} kg` },
-        { icon: '📱', name: 'Digital',   val: `${(summary.digital_co2 ?? 0).toFixed(1)} kg` },
+        { icon: '🗺️', name: 'Transport', val: `${formatCo2(summary.transport_co2)} kg` },
+        { icon: '🍽️', name: 'Food',      val: `${formatCo2(summary.food_co2)} kg` },
+        { icon: '🌡️', name: 'Energy',    val: `${formatCo2(summary.energy_co2)} kg` },
+        { icon: '📱', name: 'Digital',   val: `${formatCo2(summary.digital_co2)} kg` },
       ]);
     } else {
       setRealScore('0.0');

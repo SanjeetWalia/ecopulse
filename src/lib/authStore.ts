@@ -11,6 +11,7 @@ export interface Profile {
   location: string;
   streak_count: number;
   total_co2_saved: number;
+  timezone?: string;
 }
 
 interface AuthState {
@@ -47,6 +48,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (!error && data) {
       set({ profile: data as Profile });
+
+      // Sync device timezone to profile if different from stored value.
+      // This keeps daily_summaries bucketed per the user's actual local day.
+      try {
+        const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (deviceTz && data.timezone !== deviceTz) {
+          await supabase
+            .from('profiles')
+            .update({ timezone: deviceTz })
+            .eq('id', userId);
+        }
+      } catch {
+        // Intl not supported or timezone detection failed — ignore silently
+      }
     }
   },
 

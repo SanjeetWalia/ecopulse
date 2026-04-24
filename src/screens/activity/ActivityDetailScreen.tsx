@@ -10,6 +10,8 @@
 //   - Edit via EditActivityModal → UPDATE query. Trigger recomputes.
 //   - Refetches on focus, so returning from Home shows latest state.
 
+import { supabase } from '../../lib/supabase';
+import { formatCo2 } from '../../lib/format';
 import React, { useCallback, useState } from 'react';
 import {
   View,
@@ -26,7 +28,6 @@ import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/authStore';
 import { Colors, Typography, Radius, Spacing } from '../../constants/theme';
 import { findActivityType, findCategory } from '../../constants/activityTypes';
@@ -76,7 +77,7 @@ export default function ActivityDetailScreen({ navigation }: any) {
     const labelShort = (activity.label || '').split('·')[0].trim();
     Alert.alert(
       'Delete activity?',
-      `${labelShort} (${(activity.co2_kg ?? 0).toFixed(1)} kg CO₂e)\n\nThis will update your daily total.`,
+      `${labelShort} (${formatCo2(activity.co2_kg)} kg CO₂e)\n\nThis will update your daily total.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -135,7 +136,7 @@ export default function ActivityDetailScreen({ navigation }: any) {
         {/* Daily total chip */}
         <View style={s.totalChip}>
           <Text style={s.totalLabel}>{activities.length} activities</Text>
-          <Text style={s.totalValue}>{dailyTotal.toFixed(1)} kg CO₂e</Text>
+          <Text style={s.totalValue}>{formatCo2(dailyTotal)} kg CO₂e</Text>
         </View>
 
         {showDatePicker && (
@@ -197,7 +198,7 @@ export default function ActivityDetailScreen({ navigation }: any) {
                       </Text>
                     </View>
                     <View style={s.rowRight}>
-                      <Text style={s.rowCo2}>{(act.co2_kg ?? 0).toFixed(1)}</Text>
+                      <Text style={s.rowCo2}>{formatCo2(act.co2_kg)}</Text>
                       <Text style={s.rowCo2Unit}>kg</Text>
                     </View>
                   </TouchableOpacity>
