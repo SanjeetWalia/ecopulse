@@ -11,7 +11,8 @@
     "preview": {
       "distribution": "store",
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "image": "latest"
       },
       "channel": "preview",
       "autoIncrement": true
