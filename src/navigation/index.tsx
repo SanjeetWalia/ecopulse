@@ -36,7 +36,10 @@ function TabBar({ state, navigation }: any) {
   return (
     <View style={s.barOuter}>
       <View style={s.bar}>
-        {state.routes.filter((r: any) => r.name !== 'Explore').map((route: any, i: number) => {
+        {state.routes.map((route: any, i: number) => {
+          // Hide Explore tab from the bar but keep it in navigator
+          if (route.name === 'Explore') return null;
+
           const focused = state.index === i;
           return (
             <TouchableOpacity
