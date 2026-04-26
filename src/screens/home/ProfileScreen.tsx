@@ -41,6 +41,7 @@ export default function ProfileScreen({ navigation }: any) {
   const { profile, signOut } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ activities: 0, unique_days: 0, saved_vs_avg: 0, monthly_days: 0, streak: 0 });
   const [avatarLevel, setAvatarLevel] = useState<AvatarLevel>(1);
   const [presentIdx, setPresentIdx] = useState(0);
@@ -63,11 +64,24 @@ export default function ProfileScreen({ navigation }: any) {
   const loadStats = async () => {
     if (!profile?.id) { setLoading(false); return; }
     setLoading(true);
+    setError(null);
 
-    const { data: acts } = await supabase
+    const fetchPromise = supabase
       .from('activities')
       .select('activity_type, co2_kg, logged_at')
       .eq('user_id', profile.id);
+
+    const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: new Error('timeout') }), 10000)
+    );
+
+    const { data: acts, error: fetchError } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+
+    if (fetchError) {
+      setError(fetchError.message === 'timeout' ? 'Taking too long. Check your connection.' : 'Could not load your profile.');
+      setLoading(false);
+      return;
+    }
 
     if (acts) {
       const total_co2 = acts.reduce((s: number, a: any) => s + (a.co2_kg || 0), 0);
@@ -140,6 +154,19 @@ export default function ProfileScreen({ navigation }: any) {
       <LinearGradient colors={['#0D3320','#071810','#050F0A']} style={[s.phone, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator color={Colors.lime} size="large" />
         <Text style={{ color: Colors.lime, fontFamily: Typography.body, fontSize: 12, marginTop: 12, opacity: 0.5 }}>Reading your story...</Text>
+      </LinearGradient>
+    </View>
+  );
+
+  if (error) return (
+    <View style={s.root}>
+      <LinearGradient colors={['#0D3320','#071810','#050F0A']} style={[s.phone, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
+        <Text style={{ fontSize: 32, marginBottom: 12 }}>🌿</Text>
+        <Text style={{ color: Colors.tx, fontFamily: Typography.heading, fontSize: 16, marginBottom: 6, textAlign: 'center' }}>Couldn't load your profile</Text>
+        <Text style={{ color: Colors.tx3, fontFamily: Typography.body, fontSize: 12, marginBottom: 20, textAlign: 'center', lineHeight: 18 }}>{error}</Text>
+        <TouchableOpacity onPress={loadStats} style={{ paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, backgroundColor: 'rgba(200,244,90,0.1)', borderWidth: 0.5, borderColor: 'rgba(200,244,90,0.3)' }}>
+          <Text style={{ color: Colors.lime, fontFamily: Typography.headingBold, fontSize: 13 }}>Try again</Text>
+        </TouchableOpacity>
       </LinearGradient>
     </View>
   );

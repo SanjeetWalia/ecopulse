@@ -127,7 +127,7 @@ export default function LogActivityScreen({ navigation }: any) {
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke('analyze-activity', {
-        body: { messages: newHistory },
+        body: { messages: newHistory, timezone: profile?.timezone },
       });
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);
@@ -222,6 +222,11 @@ export default function LogActivityScreen({ navigation }: any) {
           </View>
         )}
 
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={insets.top || 12}
+        >
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 10 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {messages.map((m, i) => (
             <View key={i} style={{ gap: 6 }}>
@@ -274,8 +279,7 @@ export default function LogActivityScreen({ navigation }: any) {
           )}
         </ScrollView>
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={s.inputWrap}>
+        <View style={s.inputWrap}>
             <TextInput style={s.input} placeholder="What did you do? e.g. drove to work, had a salad..." placeholderTextColor={Colors.tx3} value={input} onChangeText={setInput} onSubmitEditing={() => sendMessage()} returnKeyType="send" multiline />
             <TouchableOpacity style={[s.sendBtn, (!input.trim() || thinking) && s.sendBtnOff]} onPress={() => sendMessage()} disabled={!input.trim() || thinking} activeOpacity={0.8}>
               {thinking ? <ActivityIndicator color="#071810" size="small" /> : <Text style={[s.sendTxt, !input.trim() && { color: Colors.tx3 }]}>↑</Text>}

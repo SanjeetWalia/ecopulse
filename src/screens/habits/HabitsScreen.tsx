@@ -83,6 +83,7 @@ export default function HabitsScreen({ navigation }: any) {
   const { profile } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [nudge, setNudge] = useState('');
@@ -111,11 +112,25 @@ export default function HabitsScreen({ navigation }: any) {
   const loadHabitsData = async () => {
     if (!profile?.id) { setLoading(false); return; }
     setLoading(true);
-    const { data: acts } = await supabase
+    setError(null);
+
+    const fetchPromise = supabase
       .from('activities')
       .select('activity_type, category, co2_kg, logged_at')
       .eq('user_id', profile.id)
       .order('logged_at', { ascending: false });
+
+    const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: new Error('timeout') }), 10000)
+    );
+
+    const { data: acts, error: fetchError } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+
+    if (fetchError) {
+      setError(fetchError.message === 'timeout' ? 'Taking too long. Check your connection.' : 'Could not load your habits.');
+      setLoading(false);
+      return;
+    }
 
     if (!acts) { setLoading(false); return; }
 
@@ -224,6 +239,19 @@ export default function HabitsScreen({ navigation }: any) {
       <View style={[s.phone, { paddingTop: insets.top || 12, justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator color={Colors.lime} size="large" />
         <Text style={{ color: Colors.tx3, fontFamily: Typography.body, fontSize: 12, marginTop: 10 }}>Reading your rhythm...</Text>
+      </View>
+    </View>
+  );
+
+  if (error) return (
+    <View style={s.root}>
+      <View style={[s.phone, { paddingTop: insets.top || 12, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
+        <Text style={{ fontSize: 32, marginBottom: 12 }}>🌿</Text>
+        <Text style={{ color: Colors.tx, fontFamily: Typography.heading, fontSize: 16, marginBottom: 6, textAlign: 'center' }}>Couldn't load your habits</Text>
+        <Text style={{ color: Colors.tx3, fontFamily: Typography.body, fontSize: 12, marginBottom: 20, textAlign: 'center', lineHeight: 18 }}>{error}</Text>
+        <TouchableOpacity onPress={loadHabitsData} style={{ paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, backgroundColor: 'rgba(200,244,90,0.1)', borderWidth: 0.5, borderColor: 'rgba(200,244,90,0.3)' }}>
+          <Text style={{ color: Colors.lime, fontFamily: Typography.headingBold, fontSize: 13 }}>Try again</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
