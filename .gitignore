@@ -24,3 +24,4 @@ dist/
 
 # VS Code (optional — tracking these is fine too, your call)
 .vscode/*.log
+package.json.sdk51-backup
