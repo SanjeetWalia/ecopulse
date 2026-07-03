@@ -12,16 +12,16 @@
       "backgroundColor": "#D7EBD7"
     },
     "ios": {
-  "supportsTablet": false,
-  "bundleIdentifier": "com.ecopulse.app",
-  "buildNumber": "1",
-  "infoPlist": {
-    "ITSAppUsesNonExemptEncryption": false,
-    "NSCameraUsageDescription": "Used to snap photos of your food for CO₂ analysis.",
-    "NSLocationWhenInUseUsageDescription": "Used to track transport routes for carbon footprint calculation.",
-    "NSPhotoLibraryUsageDescription": "Used to select photos for your eco story."
-  }
-},
+      "supportsTablet": false,
+      "bundleIdentifier": "com.ecopulse.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Used to snap photos of your food for CO₂ analysis.",
+        "NSLocationWhenInUseUsageDescription": "Used to track transport routes for carbon footprint calculation.",
+        "NSPhotoLibraryUsageDescription": "Used to select photos for your eco story."
+      }
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -53,7 +53,9 @@
         {
           "locationWhenInUsePermission": "Used to track your transport routes."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-secure-store"
     ],
     "scheme": "ecopulse",
     "extra": {
