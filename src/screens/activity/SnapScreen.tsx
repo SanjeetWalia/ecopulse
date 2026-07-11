@@ -1,79 +1,108 @@
+// src/screens/activity/SnapScreen.tsx — Redesign v3 (B3)
+//
+// Changes from v2:
+//   1. PHOTOS PERSIST: the resized JPEG uploads to the private 'snaps'
+//      bucket (path <user_id>/<timestamp>.jpg) in parallel with analysis.
+//      photo_path is saved on the activity row — the living ledger's food.
+//   2. HONEST LOGGING: the insert is error-handled. "✓ Logged" only shows
+//      when the row actually exists (fixes the silent-failure bug).
+//   3. EQUIVALENT LINE: shows the plain-English comparison from the v3
+//      edge function ("about the same as charging your phone for 3 weeks").
+//   4. SHARE TO CIRCLE: after logging, one tap writes a shared_snaps row —
+//      sharing is deliberate, never automatic. Plus a system-share link.
+//   5. CLOSE BUTTON: ✕ dismisses the modal (swipe-down also works).
+
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, StatusBar,
-  ActivityIndicator, ScrollView, Image, TextInput, KeyboardAvoidingView, Platform
+  ActivityIndicator, ScrollView, Image, TextInput, KeyboardAvoidingView,
+  Platform, Alert, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { decode } from 'base64-arraybuffer';
 import { Colors, Typography } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/authStore';
-
+import { invalidateMokoAviCache } from '../../lib/mokoAvi';
 
 interface SnapResult {
   label: string;
   co2_kg: number;
   category: string;
   activity_type: string;
+  equivalent?: string | null;
   explanation: string;
   confidence: 'high' | 'medium' | 'low';
   suggestions: string[];
 }
 
-// Context modifiers — each adds/subtracts CO₂ and explains why
 const CONTEXT_CHIPS = [
-  { id: 'delivery',  label: '🛵 Delivery',      delta: +0.8,  note: '+0.8 kg for rider trip' },
-  { id: 'oatmilk',  label: '🌾 Oat milk',       delta: -0.08, note: '−0.08 kg vs dairy' },
-  { id: 'reusable', label: '♻️ Reusable cup',    delta: -0.11, note: '−0.11 kg vs disposable' },
-  { id: 'chain',    label: '🏪 Chain café',      delta: +0.05, note: '+0.05 kg supply chain' },
-  { id: 'local',    label: '🌱 Local café',      delta: -0.04, note: '−0.04 kg vs chain' },
-  { id: 'organic',  label: '🌿 Organic',         delta: -0.03, note: '−0.03 kg certified' },
-  { id: 'flight',   label: '✈️ Long haul',       delta: +180,  note: '+180 kg return flight' },
-  { id: 'electric', label: '⚡ Electric car',    delta: -0.25, note: '−0.25 kg/mile vs petrol' },
+  { id: 'delivery', label: '🛵 Delivery',    delta: +0.8,  note: '+0.8 kg for rider trip' },
+  { id: 'oatmilk',  label: '🌾 Oat milk',    delta: -0.08, note: '−0.08 kg vs dairy' },
+  { id: 'reusable', label: '♻️ Reusable cup', delta: -0.11, note: '−0.11 kg vs disposable' },
+  { id: 'chain',    label: '🏪 Chain café',   delta: +0.05, note: '+0.05 kg supply chain' },
+  { id: 'local',    label: '🌱 Local café',   delta: -0.04, note: '−0.04 kg vs chain' },
+  { id: 'organic',  label: '🌿 Organic',      delta: -0.03, note: '−0.03 kg certified' },
+  { id: 'flight',   label: '✈️ Long haul',    delta: +180,  note: '+180 kg return flight' },
+  { id: 'electric', label: '⚡ Electric car', delta: -0.25, note: '−0.25 kg/mile vs petrol' },
 ];
 
 const getImpact = (co2: number) => {
-  if (co2 <= 0) return { label: '🌿 Carbon saving', color: Colors.lime,   bg: 'rgba(200,244,90,0.1)',  border: 'rgba(200,244,90,0.3)'  };
-  if (co2 < 1)  return { label: '🟢 Low impact',    color: Colors.lime,   bg: 'rgba(200,244,90,0.06)', border: 'rgba(200,244,90,0.15)' };
-  if (co2 < 3)  return { label: '🟡 Moderate',      color: Colors.amber,  bg: 'rgba(252,211,77,0.06)', border: 'rgba(252,211,77,0.2)'  };
-  return               { label: '🔴 High impact',   color: '#FB7185',     bg: 'rgba(251,113,133,0.06)',border: 'rgba(251,113,133,0.2)' };
+  if (co2 <= 0) return { label: '🌿 Carbon saving', color: Colors.lime,  bg: 'rgba(200,244,90,0.1)',   border: 'rgba(200,244,90,0.3)' };
+  if (co2 < 1)  return { label: '🟢 Low impact',    color: Colors.lime,  bg: 'rgba(200,244,90,0.06)',  border: 'rgba(200,244,90,0.15)' };
+  if (co2 < 3)  return { label: '🟡 Moderate',      color: Colors.amber, bg: 'rgba(252,211,77,0.06)',  border: 'rgba(252,211,77,0.2)' };
+  return               { label: '🔴 High impact',   color: '#FB7185',    bg: 'rgba(251,113,133,0.06)', border: 'rgba(251,113,133,0.2)' };
 };
-
-const SNAP_TIPS = [
-  { icon: '🍽️', text: 'Snap your meal to estimate food carbon' },
-  { icon: '🚗', text: 'Photo of your car or fuel receipt' },
-  { icon: '🧾', text: 'Energy bill or shopping receipt' },
-  { icon: '✈️', text: 'Boarding pass for flight emissions' },
-  { icon: '🛍️', text: 'Product or packaging for lifecycle CO₂' },
-];
 
 export default function SnapScreen({ navigation }: any) {
   const { profile } = useAuthStore();
   const insets = useSafeAreaInsets();
+
   const [image, setImage] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<SnapResult | null>(null);
-  const [logged, setLogged] = useState(false);
+  const [logging, setLogging] = useState(false);
+  const [loggedActivityId, setLoggedActivityId] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shared, setShared] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Feedback loop
   const [showCorrect, setShowCorrect] = useState(false);
   const [correctionText, setCorrectionText] = useState('');
   const [correcting, setCorrecting] = useState(false);
 
-  // Context chips
   const [activeChips, setActiveChips] = useState<string[]>([]);
   const [contextDelta, setContextDelta] = useState(0);
   const [contextNotes, setContextNotes] = useState<string[]>([]);
 
-  useFocusEffect(useCallback(() => {
-    setImage(null); setImageBase64(null); setResult(null);
-    setLogged(false); setError(null); setShowCorrect(false);
-    setCorrectionText(''); setActiveChips([]); setContextDelta(0); setContextNotes([]);
-  }, []));
+  const resetAll = () => {
+    setImage(null); setImageBase64(null); setPhotoPath(null);
+    setResult(null); setLoggedActivityId(null); setShared(false);
+    setError(null); setShowCorrect(false); setCorrectionText('');
+    setActiveChips([]); setContextDelta(0); setContextNotes([]);
+  };
+
+  useFocusEffect(useCallback(() => { resetAll(); }, []));
+
+  // Upload runs in parallel with analysis — user never waits on it.
+  // If it fails, logging still works with photo_path = null (honest).
+  const uploadPhoto = async (base64: string) => {
+    if (!profile?.id) return;
+    try {
+      const path = `${profile.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from('snaps')
+        .upload(path, decode(base64), { contentType: 'image/jpeg' });
+      if (!upErr) setPhotoPath(path);
+    } catch {
+      // photo_path stays null; ledger shows the entry without an image
+    }
+  };
 
   const pickImage = async (source: 'camera' | 'gallery') => {
     setError(null);
@@ -89,39 +118,35 @@ export default function SnapScreen({ navigation }: any) {
     }
     if (!res.canceled && res.assets[0]) {
       const asset = res.assets[0];
-      // Resize to max 1024px wide, re-encode at 60% quality, get base64
       const resized = await ImageManipulator.manipulateAsync(
         asset.uri,
         [{ resize: { width: 1024 } }],
         { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       );
+      resetAll();
       setImage(resized.uri);
       setImageBase64(resized.base64 || null);
-      setResult(null); setLogged(false);
-      setActiveChips([]); setContextDelta(0); setContextNotes([]);
-      if (resized.base64) analyzeImage(resized.base64);
+      if (resized.base64) {
+        uploadPhoto(resized.base64);        // fire-and-forget
+        analyzeImage(resized.base64);       // user-visible wait
+      }
     }
   };
-const analyzeImage = async (base64: string, correction?: string) => {
+
+  const analyzeImage = async (base64: string, correction?: string) => {
     setAnalyzing(true); setError(null);
     try {
       const { data, error: fnError } = await supabase.functions.invoke('analyze-food-photo', {
-        body: correction
-          ? { correction }
-          : { imageBase64: base64 },
+        body: correction ? { correction } : { imageBase64: base64 },
       });
-
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);
       if (!data?.result) throw new Error('No result returned');
 
       setResult(data.result);
-      setActiveChips([]);
-      setContextDelta(0);
-      setContextNotes([]);
-      setShowCorrect(false);
-      setCorrectionText('');
-    } catch (e: any) {
+      setActiveChips([]); setContextDelta(0); setContextNotes([]);
+      setShowCorrect(false); setCorrectionText('');
+    } catch {
       setError('Could not analyze image. Please try again.');
     }
     setAnalyzing(false);
@@ -148,27 +173,67 @@ const analyzeImage = async (base64: string, correction?: string) => {
   };
 
   const logActivity = async () => {
-    if (!result || !profile?.id) return;
+    if (!result || !profile?.id || logging) return;
+    setLogging(true);
+
     const finalCo2 = Math.max(0, result.co2_kg + contextDelta);
     const contextLabel = contextNotes.length > 0 ? ` (${contextNotes.join(', ')})` : '';
-    await supabase.from('activities').insert({
-      user_id: profile.id,
-      category: result.category,
-      activity_type: result.activity_type,
-      label: result.label + contextLabel,
-      amount: finalCo2,
-      unit: 'kg',
-      co2_kg: finalCo2,
-      source: 'snap',
-      logged_at: new Date().toISOString(),
-    });
-    setLogged(true);
+
+    const { data, error: insErr } = await supabase
+      .from('activities')
+      .insert({
+        user_id: profile.id,
+        category: result.category,
+        activity_type: result.activity_type,
+        label: result.label + contextLabel,
+        amount: finalCo2,
+        unit: 'kg',
+        co2_kg: finalCo2,
+        source: 'snap',
+        photo_path: photoPath,
+        logged_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    setLogging(false);
+
+    if (insErr || !data?.id) {
+      Alert.alert('Not saved', 'That didn’t save — please try again.');
+      return;
+    }
+
+    setLoggedActivityId(data.id);
+    invalidateMokoAviCache(profile.id);
   };
 
-  const reset = () => {
-    setImage(null); setImageBase64(null); setResult(null);
-    setLogged(false); setError(null); setShowCorrect(false);
-    setCorrectionText(''); setActiveChips([]); setContextDelta(0); setContextNotes([]);
+  const shareToCircle = async () => {
+    if (!result || !profile?.id || !loggedActivityId || sharing || shared) return;
+    setSharing(true);
+    const finalCo2 = Math.max(0, result.co2_kg + contextDelta);
+    const { error: shareErr } = await supabase.from('shared_snaps').insert({
+      user_id: profile.id,
+      activity_id: loggedActivityId,
+      label: result.label,
+      co2_kg: finalCo2,
+      photo_path: photoPath,
+    });
+    setSharing(false);
+    if (shareErr) {
+      Alert.alert('Not shared', 'Couldn’t reach your circle — try again.');
+      return;
+    }
+    setShared(true);
+  };
+
+  const shareOutside = async () => {
+    if (!result) return;
+    const finalCo2 = Math.max(0, result.co2_kg + contextDelta);
+    try {
+      await Share.share({
+        message: `${result.label} · ${(finalCo2 * 2.20462).toFixed(1)} lb CO₂e${result.equivalent ? ` — ${result.equivalent}` : ''}\n\ntryecopulse.com`,
+      });
+    } catch {}
   };
 
   const finalCo2 = result ? Math.max(0, result.co2_kg + contextDelta) : 0;
@@ -180,11 +245,18 @@ const analyzeImage = async (base64: string, correction?: string) => {
         <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
 
         <View style={s.header}>
-          <View>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.closeBtn}>
+            <Text style={s.closeTxt}>✕</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={s.title}>Snap</Text>
-            <Text style={s.subtitle}>Photo carbon assessment</Text>
+            <Text style={s.subtitle}>See the carbon story</Text>
           </View>
-          {image && <TouchableOpacity style={s.resetBtn} onPress={reset}><Text style={s.resetTxt}>New snap</Text></TouchableOpacity>}
+          {image && (
+            <TouchableOpacity style={s.resetBtn} onPress={resetAll}>
+              <Text style={s.resetTxt}>New snap</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
@@ -204,15 +276,7 @@ const analyzeImage = async (base64: string, correction?: string) => {
                   <Text style={s.captureBtnSub}>Pick existing photo</Text>
                 </TouchableOpacity>
               </View>
-              <View style={s.tipsSection}>
-                <Text style={s.tipsTitle}>What can I snap?</Text>
-                {SNAP_TIPS.map((tip, i) => (
-                  <View key={i} style={s.tipRow}>
-                    <Text style={s.tipIcon}>{tip.icon}</Text>
-                    <Text style={s.tipText}>{tip.text}</Text>
-                  </View>
-                ))}
-              </View>
+              <Text style={s.emptyHint}>Point at your lunch, your ride, your receipt — anything with a carbon story.</Text>
               {error && <View style={s.errorBox}><Text style={s.errorTxt}>{error}</Text></View>}
             </>
           )}
@@ -224,7 +288,7 @@ const analyzeImage = async (base64: string, correction?: string) => {
               {analyzing && (
                 <View style={s.analyzingOverlay}>
                   <ActivityIndicator color={Colors.lime} size="large" />
-                  <Text style={s.analyzingTxt}>{correcting ? 'Recalculating...' : 'Analysing carbon footprint...'}</Text>
+                  <Text style={s.analyzingTxt}>{correcting ? 'Recalculating…' : 'Reading the carbon story…'}</Text>
                 </View>
               )}
             </View>
@@ -233,8 +297,6 @@ const analyzeImage = async (base64: string, correction?: string) => {
           {/* Result card */}
           {result && !analyzing && impact && (
             <View style={[s.resultCard, { backgroundColor: impact.bg, borderColor: impact.border }]}>
-
-              {/* Header */}
               <View style={s.resultHeader}>
                 <Text style={s.resultLabel}>{result.label}</Text>
                 <View style={[s.confidenceBadge, { borderColor: impact.border }]}>
@@ -242,10 +304,9 @@ const analyzeImage = async (base64: string, correction?: string) => {
                 </View>
               </View>
 
-              {/* CO₂ number */}
               <View style={s.co2Row}>
                 <Text style={[s.co2Number, { color: impact.color }]}>
-                  {finalCo2 === 0 ? '0' : finalCo2 < 0 ? `-${Math.abs(finalCo2).toFixed(2)}` : finalCo2.toFixed(2)}
+                  {finalCo2 === 0 ? '0' : finalCo2.toFixed(2)}
                 </Text>
                 <Text style={s.co2Unit}>kg CO₂e</Text>
                 <View style={[s.impactBadge, { backgroundColor: impact.bg, borderColor: impact.border }]}>
@@ -253,7 +314,13 @@ const analyzeImage = async (base64: string, correction?: string) => {
                 </View>
               </View>
 
-              {/* Context delta display */}
+              {/* The learning moment */}
+              {!!result.equivalent && (
+                <View style={s.equivRow}>
+                  <Text style={s.equivTxt}>{result.equivalent}</Text>
+                </View>
+              )}
+
               {contextDelta !== 0 && (
                 <View style={s.deltaRow}>
                   <Text style={s.deltaBase}>Base: {result.co2_kg.toFixed(2)} kg</Text>
@@ -266,7 +333,7 @@ const analyzeImage = async (base64: string, correction?: string) => {
 
               <Text style={s.explanation}>{result.explanation}</Text>
 
-              {/* ── Context chips ──────────────────────────────────── */}
+              {/* Context chips */}
               <View style={s.contextSection}>
                 <Text style={s.contextTitle}>Add context — how was this ordered?</Text>
                 <View style={s.chipsWrap}>
@@ -287,7 +354,6 @@ const analyzeImage = async (base64: string, correction?: string) => {
                 </View>
               </View>
 
-              {/* ── Greener alternatives ───────────────────────────── */}
               {result.suggestions?.length > 0 && (
                 <View style={s.suggestionsBox}>
                   <Text style={s.suggestionsTitle}>Greener alternatives</Text>
@@ -300,7 +366,7 @@ const analyzeImage = async (base64: string, correction?: string) => {
                 </View>
               )}
 
-              {/* ── Feedback / correction loop ─────────────────────── */}
+              {/* Correction loop */}
               {!showCorrect ? (
                 <TouchableOpacity style={s.correctBtn} onPress={() => setShowCorrect(true)}>
                   <Text style={s.correctBtnTxt}>✏️ Not quite right? Correct this</Text>
@@ -329,23 +395,39 @@ const analyzeImage = async (base64: string, correction?: string) => {
                     >
                       {correcting
                         ? <ActivityIndicator color="#071810" size="small" />
-                        : <Text style={s.correctSubmitTxt}>Recalculate →</Text>
-                      }
+                        : <Text style={s.correctSubmitTxt}>Recalculate →</Text>}
                     </TouchableOpacity>
                   </View>
                 </View>
               )}
 
-              {/* ── Log button ─────────────────────────────────────── */}
-              {!logged ? (
-                <TouchableOpacity style={s.logBtn} onPress={logActivity} activeOpacity={0.85}>
-                  <Text style={s.logBtnTxt}>Log {finalCo2.toFixed(2)} kg CO₂e ✓</Text>
+              {/* Log → then share */}
+              {!loggedActivityId ? (
+                <TouchableOpacity style={s.logBtn} onPress={logActivity} activeOpacity={0.85} disabled={logging}>
+                  {logging
+                    ? <ActivityIndicator color="#071810" />
+                    : <Text style={s.logBtnTxt}>Add to my day · {(finalCo2 * 2.20462).toFixed(1)} lb ✓</Text>}
                 </TouchableOpacity>
               ) : (
-                <View style={s.loggedBadge}>
-                  <Text style={s.loggedTxt}>✓ Logged to Green Steps</Text>
-                  <TouchableOpacity onPress={reset}>
-                    <Text style={s.snapAnotherTxt}>Snap another →</Text>
+                <View style={{ gap: 8 }}>
+                  <View style={s.loggedBadge}>
+                    <Text style={s.loggedTxt}>✓ Added to your day</Text>
+                    <TouchableOpacity onPress={resetAll}>
+                      <Text style={s.snapAnotherTxt}>Snap another →</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity
+                    style={[s.circleBtn, shared && { opacity: 0.55 }]}
+                    onPress={shareToCircle}
+                    disabled={sharing || shared}
+                    activeOpacity={0.85}
+                  >
+                    {sharing
+                      ? <ActivityIndicator color={Colors.lime} size="small" />
+                      : <Text style={s.circleBtnTxt}>{shared ? '🌿 Shared with your circle' : 'Share to circle 🌿'}</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={shareOutside} style={{ alignItems: 'center', paddingVertical: 6 }}>
+                    <Text style={s.outsideTxt}>share outside ↗</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -360,7 +442,6 @@ const analyzeImage = async (base64: string, correction?: string) => {
               </TouchableOpacity>
             </View>
           )}
-
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
@@ -369,24 +450,22 @@ const analyzeImage = async (base64: string, correction?: string) => {
 
 const s = StyleSheet.create({
   phone: { width: 390, maxWidth: '100%', flex: 1, backgroundColor: Colors.bg, overflow: 'hidden' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
+  closeBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.sf, justifyContent: 'center', alignItems: 'center' },
+  closeTxt: { color: Colors.tx2, fontSize: 14 },
   title: { fontFamily: Typography.heading, fontSize: 22, color: Colors.tx, letterSpacing: -0.5 },
   subtitle: { fontFamily: Typography.body, fontSize: 11, color: Colors.tx3, marginTop: 1 },
   resetBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: 'rgba(200,244,90,0.08)', borderWidth: 0.5, borderColor: 'rgba(200,244,90,0.2)' },
   resetTxt: { fontFamily: Typography.headingBold, fontSize: 11, color: Colors.lime },
-  captureRow: { flexDirection: 'row', gap: 10, marginBottom: 16, marginTop: 8 },
+  captureRow: { flexDirection: 'row', gap: 10, marginBottom: 14, marginTop: 8 },
   captureBtn: { flex: 1, backgroundColor: 'rgba(200,244,90,0.06)', borderWidth: 0.5, borderColor: 'rgba(200,244,90,0.2)', borderRadius: 18, padding: 20, alignItems: 'center', gap: 6 },
   galleryBtn: { backgroundColor: 'rgba(45,212,191,0.06)', borderColor: 'rgba(45,212,191,0.2)' },
   captureBtnIcon: { fontSize: 28 },
   captureBtnTxt: { fontFamily: Typography.headingBold, fontSize: 13, color: Colors.tx },
   captureBtnSub: { fontFamily: Typography.body, fontSize: 10, color: Colors.tx3 },
-  tipsSection: { backgroundColor: Colors.bg2, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.border, padding: 14, gap: 10 },
-  tipsTitle: { fontFamily: Typography.headingBold, fontSize: 9, color: Colors.tx3, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
-  tipRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  tipIcon: { fontSize: 16, width: 24 },
-  tipText: { fontFamily: Typography.body, fontSize: 12, color: Colors.tx2, flex: 1 },
+  emptyHint: { fontFamily: Typography.body, fontSize: 13, color: Colors.tx2, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24, marginTop: 8 },
   imageWrap: { borderRadius: 18, overflow: 'hidden', marginBottom: 14, position: 'relative' },
-  previewImage: { width: '100%', height: 240, borderRadius: 18 },
+  previewImage: { width: '100%', height: 220, borderRadius: 18 },
   analyzingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(7,24,16,0.85)', justifyContent: 'center', alignItems: 'center', gap: 12 },
   analyzingTxt: { fontFamily: Typography.headingBold, fontSize: 13, color: Colors.lime },
   resultCard: { borderRadius: 18, borderWidth: 0.5, padding: 16, gap: 12 },
@@ -399,6 +478,8 @@ const s = StyleSheet.create({
   co2Unit: { fontFamily: Typography.body, fontSize: 14, color: Colors.tx3 },
   impactBadge: { marginLeft: 'auto', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 0.5 },
   impactLabel: { fontFamily: Typography.headingBold, fontSize: 10 },
+  equivRow: { borderLeftWidth: 2, borderLeftColor: 'rgba(45,212,191,0.5)', paddingLeft: 10 },
+  equivTxt: { fontFamily: Typography.body, fontSize: 13.5, color: Colors.teal, fontStyle: 'italic', lineHeight: 19 },
   deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 8 },
   deltaBase: { fontFamily: Typography.body, fontSize: 10, color: Colors.tx3, flex: 1 },
   deltaAmt: { fontFamily: Typography.headingBold, fontSize: 10 },
@@ -430,6 +511,9 @@ const s = StyleSheet.create({
   loggedBadge: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(200,244,90,0.08)', borderRadius: 12, padding: 12 },
   loggedTxt: { fontFamily: Typography.headingBold, fontSize: 12, color: Colors.lime },
   snapAnotherTxt: { fontFamily: Typography.headingBold, fontSize: 12, color: Colors.teal },
+  circleBtn: { borderRadius: 14, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: Colors.border2, backgroundColor: 'rgba(200,244,90,0.05)' },
+  circleBtnTxt: { fontFamily: Typography.headingBold, fontSize: 13, color: Colors.lime },
+  outsideTxt: { fontFamily: Typography.body, fontSize: 11, color: Colors.tx3, textDecorationLine: 'underline' },
   errorBox: { backgroundColor: 'rgba(251,113,133,0.08)', borderRadius: 14, borderWidth: 0.5, borderColor: 'rgba(251,113,133,0.2)', padding: 14, gap: 10, marginTop: 10 },
   errorTxt: { fontFamily: Typography.body, fontSize: 13, color: '#FB7185', lineHeight: 20 },
   retryBtn: { alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: 'rgba(251,113,133,0.1)', borderWidth: 0.5, borderColor: 'rgba(251,113,133,0.2)' },

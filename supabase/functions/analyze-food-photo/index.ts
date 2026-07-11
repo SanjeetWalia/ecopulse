@@ -1,18 +1,31 @@
 import "@supabase/functions-js/edge-runtime.d.ts"
 
+// analyze-food-photo — v3
+// Changes from v2:
+//   1. FIX: prompt offered category "shopping", which violates the
+//      activities CHECK constraint (transport|food|energy|digital|other)
+//      and caused silent insert failures. Prompt now only offers valid
+//      categories, and the response is defensively mapped anyway.
+//   2. NEW: "equivalent" field — one plain-English real-world comparison
+//      for the result card ("about the same as charging your phone for
+//      three weeks"). The redesign's learning moment.
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 }
 
+const VALID_CATEGORIES = ["transport", "food", "energy", "digital", "other"]
+
 const SYSTEM_PROMPT = `You are an expert carbon footprint analyst. Analyze images and estimate CO₂ emissions.
 Always respond with ONLY this JSON (no markdown):
-{"label":"short description","co2_kg":0.0,"category":"transport|food|energy|shopping|digital|other","activity_type":"car|flight|bus|train|meatmeal|vegmeal|coffee|heating|ac|streaming|custom","explanation":"1-2 sentences","confidence":"high|medium|low","suggestions":["greener alternative 1","greener alternative 2"]}
-CO₂ reference: beef meal 3.6kg, chicken 1.8kg, veg meal 0.8kg, coffee/latte 0.21kg, chai latte 0.18kg, petrol car/mile 0.404kg, flight/mile 0.255kg.`
+{"label":"short description","co2_kg":0.0,"category":"transport|food|energy|digital|other","activity_type":"car|flight|bus|train|meatmeal|vegmeal|coffee|heating|ac|streaming|custom","equivalent":"one plain-English comparison a regular person feels, e.g. 'about the same as charging your phone for three weeks' or 'like driving 14 miles'","explanation":"1-2 sentences","confidence":"high|medium|low","suggestions":["greener alternative 1","greener alternative 2"]}
+Rules for category: shopping, purchases, and packaging belong under "other". Anything not clearly transport/food/energy/digital is "other".
+Rules for equivalent: keep it under 12 words, everyday units only (phone charges, miles driven, cups of coffee, hours of streaming). Never repeat the kg number.
+CO₂ reference: beef meal 3.6kg, chicken 1.8kg, veg meal 0.8kg, coffee/latte 0.21kg, chai latte 0.18kg, petrol car/mile 0.404kg, flight/mile 0.255kg, phone full charge 0.008kg, 1hr HD streaming 0.036kg.`
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS })
   }
@@ -82,6 +95,15 @@ Deno.serve(async (req) => {
     }
 
     const parsed = JSON.parse(text.slice(start, end + 1))
+
+    // Defensive: never let an invalid category reach the DB constraint.
+    if (!VALID_CATEGORIES.includes(parsed.category)) {
+      parsed.category = "other"
+    }
+    // Defensive: equivalent must exist for the result card.
+    if (typeof parsed.equivalent !== "string" || parsed.equivalent.trim() === "") {
+      parsed.equivalent = null
+    }
 
     return new Response(
       JSON.stringify({ result: parsed }),
