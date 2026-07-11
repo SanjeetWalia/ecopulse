@@ -14,15 +14,16 @@ import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 import HomeScreen from '../screens/home/HomeScreen';
 import AirScreen from '../screens/air/AirScreen';
 import PulseScreen from '../screens/pulse/PulseScreen';
-import ProfileScreen from '../screens/home/ProfileScreen';
+import YouScreen from '../screens/you/YouScreen';
 import SnapScreen from '../screens/activity/SnapScreen';
 import ActivityDetailScreen from '../screens/activity/ActivityDetailScreen';
 import LogActivityScreen from '../screens/activity/LogActivityScreen';
 
 // Redesign v3 (July 2026): 4 tabs + raised center camera.
-// Legacy screens (Habits, Explore, GiftPlant, Messages, Conversation,
-// WeeklyWrapped, MomentsFeed, CarbonChallenge, Settings) are UNROUTED,
-// not deleted. Code preserved in src/screens for reference/salvage.
+// Snap presents as a sheet modal — swipe down to dismiss.
+// Legacy screens (ProfileScreen, Habits, Explore, GiftPlant, Messages,
+// Conversation, WeeklyWrapped, MomentsFeed, CarbonChallenge, Settings)
+// are UNROUTED, not deleted. Code preserved in src/screens.
 
 const A = createNativeStackNavigator();
 const M = createNativeStackNavigator();
@@ -73,7 +74,7 @@ function MainTabs() {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Air" component={AirScreen} />
       <Tab.Screen name="Pulse" component={PulseScreen} />
-      <Tab.Screen name="You" component={ProfileScreen} />
+      <Tab.Screen name="You" component={YouScreen} />
     </Tab.Navigator>
   );
 }
@@ -82,7 +83,7 @@ function MainNav() {
   return (
     <M.Navigator screenOptions={{ headerShown: false }}>
       <M.Screen name="Tabs" component={MainTabs} />
-      <M.Screen name="Snap" component={SnapScreen} options={{ presentation: 'fullScreenModal' }} />
+      <M.Screen name="Snap" component={SnapScreen} options={{ presentation: 'modal' }} />
       <M.Screen name="ActivityDetail" component={ActivityDetailScreen} />
       <M.Screen name="LogActivity" component={LogActivityScreen} options={{ presentation: 'modal' }} />
     </M.Navigator>
