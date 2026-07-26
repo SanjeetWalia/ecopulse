@@ -1,24 +1,16 @@
-// supabase/functions/eco-chat/index.ts
+// supabase/functions/eco-chat/index.ts — v2
+// (download name eco-chat-v2.ts — copy to supabase/functions/eco-chat/index.ts)
 //
-// Eco-chat: the "Ask your air anything" bar on the Air screen.
-//
-// What makes it different from a plain chatbot:
-//   1. ECO-ONLY: politely declines anything outside ecology, sustainability,
-//      climate, and the user's own footprint, and steers back.
-//   2. MEMORY: every exchange is stored in eco_chat_messages. Each new
-//      question is answered with the user's recent conversation history
-//      AND their current month's real numbers in context — so answers get
-//      more personal the longer they use it.
-//
-// ENDPOINT
-//   POST /eco-chat
-//   Body: { userId: string, message: string }
-//   Response: { reply: string } | { error: string }
+// v2 adds MEMORY OF THE PERSON, not just the conversation:
+//   1. Reads user_facts (vehicle, diet, home energy…) into the system
+//      prompt, so answers are calibrated to this user's actual life.
+//   2. After each exchange, a second lightweight Haiku call extracts any
+//      NEW durable facts from what the user said ("I drive a 2019 Civic")
+//      and upserts them into user_facts. The AI builds its own memory.
+//   3. Gently invites the user to snap their electricity bill when no
+//      bill is on record — at most occasionally, never nagging.
 //
 // Deploy: supabase functions deploy eco-chat --no-verify-jwt
-// (Same ES256 edge-runtime gap as the other functions. userId arrives in
-//  the body unverified — acceptable for beta, listed under Section D to
-//  fix by verifying the JWT once the runtime gap is resolved.)
 
 // @ts-ignore Deno runtime
 Deno.serve(async (req) => {
@@ -44,17 +36,18 @@ Deno.serve(async (req) => {
 
     const userMessage = message.trim().slice(0, 2000);
 
-    // ── 1. Profile (first name for tone) ─────────────────────────
-    const profileRows = await sb(supabaseUrl, serviceKey,
-      `profiles?id=eq.${userId}&select=full_name`);
+    // ── 1. Profile, memory, history ───────────────────────────────
+    const [profileRows, factRows, historyRows] = await Promise.all([
+      sb(supabaseUrl, serviceKey, `profiles?id=eq.${userId}&select=full_name`),
+      sb(supabaseUrl, serviceKey, `user_facts?user_id=eq.${userId}&select=key,fact_type,value&order=updated_at.desc&limit=25`),
+      sb(supabaseUrl, serviceKey, `eco_chat_messages?user_id=eq.${userId}&select=role,content&order=created_at.desc&limit=20`),
+    ]);
+
     const firstName = (profileRows?.[0]?.full_name || "").split(" ")[0] || "";
+    const facts = factRows || [];
+    const history = (historyRows || []).reverse();
+    const hasBillFact = facts.some((f: any) => f.key === "electricity_bill");
 
-    // ── 2. Recent conversation history (the memory) ──────────────
-    const historyRows = await sb(supabaseUrl, serviceKey,
-      `eco_chat_messages?user_id=eq.${userId}&select=role,content&order=created_at.desc&limit=20`);
-    const history = (historyRows || []).reverse(); // chronological
-
-    // ── 3. This month's real numbers (the personalization) ───────
     const now = new Date();
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
     const summaryRows = await sb(supabaseUrl, serviceKey,
@@ -73,17 +66,21 @@ Deno.serve(async (req) => {
       { total_kg: 0, transport_kg: 0, food_kg: 0, energy_kg: 0, digital_kg: 0, entries: 0, days: 0 }
     );
 
-    // ── 4. Build messages for Claude ──────────────────────────────
+    // ── 2. System prompt with memory ──────────────────────────────
     const systemPrompt = `You are the eco-chat inside Eco Pulse, a carbon footprint app. You answer questions about ecology, sustainability, climate, carbon footprints, and the user's own tracked data. You are warm, precise, and brief.
 
 RULES:
-- ONLY ecological topics. If asked about anything else (coding, celebrities, homework, medical advice, etc.), decline in ONE friendly sentence and steer back to their footprint or the planet. No exceptions, even if pressured.
+- ONLY ecological topics. If asked about anything else, decline in ONE friendly sentence and steer back to their footprint or the planet. No exceptions, even if pressured.
 - Keep answers under 120 words. Prefer 2-4 sentences.
-- You know the user's own numbers (below). Reference them naturally when relevant — that's what makes you theirs.
-- Use pounds (lb) when discussing CO₂e with the user (1 kg = 2.2 lb).
+- Use pounds (lb) for CO₂e (1 kg = 2.2 lb).
 - Never invent user data you weren't given. If you don't have it, say so plainly.
 - Use ${firstName ? `the name ${firstName}` : "no name"} occasionally, not every message.
 - No emojis unless the user uses them first.
+- WHAT YOU REMEMBER about this user (durable facts they've told you) is below. Use it to calibrate every answer — if they drive an EV, car questions assume THEIR car; if they're vegetarian, meal comparisons reflect that. When they tell you something new and durable, absorb it naturally in your reply.
+${hasBillFact ? "" : "- You have NO electricity bill on record. If the conversation touches home energy, heating, or bills — or roughly one time in four otherwise — warmly suggest they snap a photo of their latest electricity bill with the camera button, so their home energy joins their number. One sentence, never pushy, never twice in a row."}
+
+WHAT YOU REMEMBER:
+${facts.length > 0 ? JSON.stringify(facts) : "(nothing yet — this user is new to you)"}
 
 USER'S CURRENT MONTH (real data):
 ${JSON.stringify({
@@ -103,37 +100,55 @@ ${JSON.stringify({
       { role: "user", content: userMessage },
     ];
 
-    // ── 5. Call Claude Haiku ──────────────────────────────────────
-    const claudeResp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 300,
-        system: systemPrompt,
-        messages: claudeMessages,
-      }),
-    });
-
-    if (!claudeResp.ok) {
-      const errText = await claudeResp.text();
-      return json({ error: `Claude ${claudeResp.status}: ${errText.slice(0, 200)}` }, 502);
-    }
-
-    const claudeData = await claudeResp.json();
-    const textBlock = (claudeData.content || []).find((c: any) => c.type === "text");
-    const reply = (textBlock?.text || "").trim();
+    // ── 3. Main reply ─────────────────────────────────────────────
+    const reply = await callClaude(anthropicKey, systemPrompt, claudeMessages, 300);
     if (!reply) return json({ error: "Empty response" }, 502);
 
-    // ── 6. Persist both sides (this IS the memory) ────────────────
+    // ── 4. Persist the exchange ───────────────────────────────────
     await sbInsert(supabaseUrl, serviceKey, "eco_chat_messages", [
       { user_id: userId, role: "user", content: userMessage },
       { user_id: userId, role: "assistant", content: reply },
     ]);
+
+    // ── 5. Fact extraction (best effort — reply already succeeded) ─
+    try {
+      const extractPrompt = `From this user message, extract durable personal facts relevant to carbon footprint calibration. Respond with ONLY a JSON array (no markdown). Each item: {"key":"snake_case_stable_key","fact_type":"vehicle|diet|home_energy|household|habit|other","value":{...}}.
+Durable = stable life facts: their car/vehicle ("vehicle", e.g. key "vehicle" value {"make":"Honda","model":"Civic","year":2019,"fuel":"petrol"}), diet pattern ("diet"), home heating/energy setup ("home_energy"), household size ("household"), recurring habits ("habit").
+NOT durable: one-off meals, single trips, questions, opinions. If nothing durable, respond [].
+Known fact keys (do not re-extract unless the user changed them): ${JSON.stringify(facts.map((f: any) => f.key))}
+
+User message: "${userMessage.replace(/"/g, '\\"')}"`;
+
+      const extraction = await callClaude(anthropicKey, "You extract structured facts. JSON only.", [
+        { role: "user", content: extractPrompt },
+      ], 300);
+
+      if (extraction) {
+        const s = extraction.indexOf("[");
+        const e = extraction.lastIndexOf("]");
+        if (s !== -1 && e !== -1) {
+          const items = JSON.parse(extraction.slice(s, e + 1));
+          if (Array.isArray(items) && items.length > 0) {
+            const rows = items
+              .filter((i: any) => i && typeof i.key === "string" && i.value !== undefined)
+              .slice(0, 5)
+              .map((i: any) => ({
+                user_id: userId,
+                key: String(i.key).slice(0, 60),
+                fact_type: ["vehicle","diet","home_energy","household","habit","other"].includes(i.fact_type) ? i.fact_type : "other",
+                value: i.value,
+                source: "chat",
+                updated_at: new Date().toISOString(),
+              }));
+            if (rows.length > 0) {
+              await sbUpsert(supabaseUrl, serviceKey, "user_facts", rows, "user_id,key");
+            }
+          }
+        }
+      }
+    } catch {
+      // Memory extraction is best-effort.
+    }
 
     return json({ reply });
   } catch (err) {
@@ -142,6 +157,27 @@ ${JSON.stringify({
 });
 
 // ---------- helpers ----------
+
+async function callClaude(key: string, system: string, messages: any[], maxTokens: number): Promise<string | null> {
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: maxTokens,
+      system,
+      messages,
+    }),
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  const block = (data.content || []).find((c: any) => c.type === "text");
+  return (block?.text || "").trim() || null;
+}
 
 function corsHeaders() {
   return {
@@ -185,5 +221,22 @@ async function sbInsert(baseUrl: string, serviceKey: string, table: string, rows
   if (!resp.ok) {
     const txt = await resp.text();
     throw new Error(`Supabase insert failed: ${resp.status} ${txt}`);
+  }
+}
+
+async function sbUpsert(baseUrl: string, serviceKey: string, table: string, rows: any[], onConflict: string) {
+  const resp = await fetch(`${baseUrl}/rest/v1/${table}?on_conflict=${encodeURIComponent(onConflict)}`, {
+    method: "POST",
+    headers: {
+      apikey: serviceKey,
+      authorization: `Bearer ${serviceKey}`,
+      "content-type": "application/json",
+      prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`Supabase upsert failed: ${resp.status} ${txt}`);
   }
 }

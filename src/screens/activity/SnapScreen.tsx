@@ -1,16 +1,14 @@
-// src/screens/activity/SnapScreen.tsx — Redesign v3 (B3)
+// src/screens/activity/SnapScreen.tsx — Redesign v3.1
+// (download name SnapScreen-v31.tsx — copy to src/screens/activity/SnapScreen.tsx)
 //
-// Changes from v2:
-//   1. PHOTOS PERSIST: the resized JPEG uploads to the private 'snaps'
-//      bucket (path <user_id>/<timestamp>.jpg) in parallel with analysis.
-//      photo_path is saved on the activity row — the living ledger's food.
-//   2. HONEST LOGGING: the insert is error-handled. "✓ Logged" only shows
-//      when the row actually exists (fixes the silent-failure bug).
-//   3. EQUIVALENT LINE: shows the plain-English comparison from the v3
-//      edge function ("about the same as charging your phone for 3 weeks").
-//   4. SHARE TO CIRCLE: after logging, one tap writes a shared_snaps row —
-//      sharing is deliberate, never automatic. Plus a system-share link.
-//   5. CLOSE BUTTON: ✕ dismisses the modal (swipe-down also works).
+// v3.1 on top of B3:
+//   1. Sends userId to analyze-food-photo → results calibrate to the
+//      user's stored facts (their car, their diet).
+//   2. BILL SPREAD: when the analyzer detects an electricity bill
+//      (result.bill = {kwh, period_days}), the log button becomes
+//      "Spread across N days" — inserting one row per billing day so
+//      each day carries its true share of the bill.
+//   3. Share-to-circle failures now show the real error message.
 
 import React, { useState, useCallback } from 'react';
 import {
@@ -37,6 +35,7 @@ interface SnapResult {
   explanation: string;
   confidence: 'high' | 'medium' | 'low';
   suggestions: string[];
+  bill?: { kwh: number; period_days: number } | null;
 }
 
 const CONTEXT_CHIPS = [
@@ -89,8 +88,6 @@ export default function SnapScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => { resetAll(); }, []));
 
-  // Upload runs in parallel with analysis — user never waits on it.
-  // If it fails, logging still works with photo_path = null (honest).
   const uploadPhoto = async (base64: string) => {
     if (!profile?.id) return;
     try {
@@ -99,9 +96,7 @@ export default function SnapScreen({ navigation }: any) {
         .from('snaps')
         .upload(path, decode(base64), { contentType: 'image/jpeg' });
       if (!upErr) setPhotoPath(path);
-    } catch {
-      // photo_path stays null; ledger shows the entry without an image
-    }
+    } catch { /* ledger shows entry without image */ }
   };
 
   const pickImage = async (source: 'camera' | 'gallery') => {
@@ -127,8 +122,8 @@ export default function SnapScreen({ navigation }: any) {
       setImage(resized.uri);
       setImageBase64(resized.base64 || null);
       if (resized.base64) {
-        uploadPhoto(resized.base64);        // fire-and-forget
-        analyzeImage(resized.base64);       // user-visible wait
+        uploadPhoto(resized.base64);
+        analyzeImage(resized.base64);
       }
     }
   };
@@ -137,7 +132,9 @@ export default function SnapScreen({ navigation }: any) {
     setAnalyzing(true); setError(null);
     try {
       const { data, error: fnError } = await supabase.functions.invoke('analyze-food-photo', {
-        body: correction ? { correction } : { imageBase64: base64 },
+        body: correction
+          ? { correction, userId: profile?.id }
+          : { imageBase64: base64, userId: profile?.id },
       });
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);
@@ -172,6 +169,9 @@ export default function SnapScreen({ navigation }: any) {
     }
   };
 
+  const isBill = !!(result?.bill && result.bill.period_days >= 2);
+
+  // Normal single-activity log
   const logActivity = async () => {
     if (!result || !profile?.id || logging) return;
     setLogging(true);
@@ -197,13 +197,54 @@ export default function SnapScreen({ navigation }: any) {
       .single();
 
     setLogging(false);
-
     if (insErr || !data?.id) {
-      Alert.alert('Not saved', 'That didn’t save — please try again.');
+      Alert.alert('Not saved', insErr?.message ?? 'That didn’t save — please try again.');
       return;
     }
-
     setLoggedActivityId(data.id);
+    invalidateMokoAviCache(profile.id);
+  };
+
+  // Bill spread: one row per billing day, each carrying its share.
+  const logBillSpread = async () => {
+    if (!result?.bill || !profile?.id || logging) return;
+    setLogging(true);
+
+    const days = result.bill.period_days;
+    const totalCo2 = Math.max(0, result.co2_kg + contextDelta);
+    const dailyCo2 = totalCo2 / days;
+    const dailyKwh = result.bill.kwh / days;
+
+    const rows = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - (days - 1 - i));
+      d.setHours(12, 0, 0, 0);
+      rows.push({
+        user_id: profile.id,
+        category: 'energy',
+        activity_type: 'heating',
+        label: `Electricity · ${dailyKwh.toFixed(1)} kWh (bill day ${i + 1}/${days})`,
+        amount: dailyKwh,
+        unit: 'kg',
+        co2_kg: Number(dailyCo2.toFixed(4)),
+        source: 'snap',
+        photo_path: i === days - 1 ? photoPath : null,
+        logged_at: d.toISOString(),
+      });
+    }
+
+    const { data, error: insErr } = await supabase
+      .from('activities')
+      .insert(rows)
+      .select('id');
+
+    setLogging(false);
+    if (insErr || !data || data.length === 0) {
+      Alert.alert('Not saved', insErr?.message ?? 'The bill didn’t save — please try again.');
+      return;
+    }
+    setLoggedActivityId(data[data.length - 1].id);
     invalidateMokoAviCache(profile.id);
   };
 
@@ -220,7 +261,7 @@ export default function SnapScreen({ navigation }: any) {
     });
     setSharing(false);
     if (shareErr) {
-      Alert.alert('Not shared', 'Couldn’t reach your circle — try again.');
+      Alert.alert('Not shared', shareErr.message);
       return;
     }
     setShared(true);
@@ -261,7 +302,6 @@ export default function SnapScreen({ navigation }: any) {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
 
-          {/* Empty state */}
           {!image && (
             <>
               <View style={s.captureRow}>
@@ -276,12 +316,11 @@ export default function SnapScreen({ navigation }: any) {
                   <Text style={s.captureBtnSub}>Pick existing photo</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={s.emptyHint}>Point at your lunch, your ride, your receipt — anything with a carbon story.</Text>
+              <Text style={s.emptyHint}>Point at your lunch, your ride, your receipt — or your electricity bill.</Text>
               {error && <View style={s.errorBox}><Text style={s.errorTxt}>{error}</Text></View>}
             </>
           )}
 
-          {/* Image preview */}
           {image && (
             <View style={s.imageWrap}>
               <Image source={{ uri: image }} style={s.previewImage} resizeMode="cover" />
@@ -294,7 +333,6 @@ export default function SnapScreen({ navigation }: any) {
             </View>
           )}
 
-          {/* Result card */}
           {result && !analyzing && impact && (
             <View style={[s.resultCard, { backgroundColor: impact.bg, borderColor: impact.border }]}>
               <View style={s.resultHeader}>
@@ -314,10 +352,17 @@ export default function SnapScreen({ navigation }: any) {
                 </View>
               </View>
 
-              {/* The learning moment */}
               {!!result.equivalent && (
                 <View style={s.equivRow}>
                   <Text style={s.equivTxt}>{result.equivalent}</Text>
+                </View>
+              )}
+
+              {isBill && (
+                <View style={s.billRow}>
+                  <Text style={s.billTxt}>
+                    📄 This bill covers {result!.bill!.period_days} days ({result!.bill!.kwh} kWh). Spread it so each day carries its share.
+                  </Text>
                 </View>
               )}
 
@@ -333,26 +378,27 @@ export default function SnapScreen({ navigation }: any) {
 
               <Text style={s.explanation}>{result.explanation}</Text>
 
-              {/* Context chips */}
-              <View style={s.contextSection}>
-                <Text style={s.contextTitle}>Add context — how was this ordered?</Text>
-                <View style={s.chipsWrap}>
-                  {CONTEXT_CHIPS.map(chip => {
-                    const active = activeChips.includes(chip.id);
-                    return (
-                      <TouchableOpacity
-                        key={chip.id}
-                        style={[s.chip, active && { backgroundColor: 'rgba(200,244,90,0.15)', borderColor: 'rgba(200,244,90,0.4)' }]}
-                        onPress={() => toggleChip(chip)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[s.chipTxt, active && { color: Colors.lime }]}>{chip.label}</Text>
-                        {active && <Text style={s.chipNote}>{chip.note}</Text>}
-                      </TouchableOpacity>
-                    );
-                  })}
+              {!isBill && (
+                <View style={s.contextSection}>
+                  <Text style={s.contextTitle}>Add context — how was this ordered?</Text>
+                  <View style={s.chipsWrap}>
+                    {CONTEXT_CHIPS.map(chip => {
+                      const active = activeChips.includes(chip.id);
+                      return (
+                        <TouchableOpacity
+                          key={chip.id}
+                          style={[s.chip, active && { backgroundColor: 'rgba(200,244,90,0.15)', borderColor: 'rgba(200,244,90,0.4)' }]}
+                          onPress={() => toggleChip(chip)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[s.chipTxt, active && { color: Colors.lime }]}>{chip.label}</Text>
+                          {active && <Text style={s.chipNote}>{chip.note}</Text>}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
+              )}
 
               {result.suggestions?.length > 0 && (
                 <View style={s.suggestionsBox}>
@@ -366,7 +412,6 @@ export default function SnapScreen({ navigation }: any) {
                 </View>
               )}
 
-              {/* Correction loop */}
               {!showCorrect ? (
                 <TouchableOpacity style={s.correctBtn} onPress={() => setShowCorrect(true)}>
                   <Text style={s.correctBtnTxt}>✏️ Not quite right? Correct this</Text>
@@ -401,31 +446,41 @@ export default function SnapScreen({ navigation }: any) {
                 </View>
               )}
 
-              {/* Log → then share */}
               {!loggedActivityId ? (
-                <TouchableOpacity style={s.logBtn} onPress={logActivity} activeOpacity={0.85} disabled={logging}>
+                <TouchableOpacity
+                  style={s.logBtn}
+                  onPress={isBill ? logBillSpread : logActivity}
+                  activeOpacity={0.85}
+                  disabled={logging}
+                >
                   {logging
                     ? <ActivityIndicator color="#071810" />
-                    : <Text style={s.logBtnTxt}>Add to my day · {(finalCo2 * 2.20462).toFixed(1)} lb ✓</Text>}
+                    : <Text style={s.logBtnTxt}>
+                        {isBill
+                          ? `Spread across ${result!.bill!.period_days} days ✓`
+                          : `Add to my day · ${(finalCo2 * 2.20462).toFixed(1)} lb ✓`}
+                      </Text>}
                 </TouchableOpacity>
               ) : (
                 <View style={{ gap: 8 }}>
                   <View style={s.loggedBadge}>
-                    <Text style={s.loggedTxt}>✓ Added to your day</Text>
+                    <Text style={s.loggedTxt}>{isBill ? '✓ Bill spread across your days' : '✓ Added to your day'}</Text>
                     <TouchableOpacity onPress={resetAll}>
                       <Text style={s.snapAnotherTxt}>Snap another →</Text>
                     </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    style={[s.circleBtn, shared && { opacity: 0.55 }]}
-                    onPress={shareToCircle}
-                    disabled={sharing || shared}
-                    activeOpacity={0.85}
-                  >
-                    {sharing
-                      ? <ActivityIndicator color={Colors.lime} size="small" />
-                      : <Text style={s.circleBtnTxt}>{shared ? '🌿 Shared with your circle' : 'Share to circle 🌿'}</Text>}
-                  </TouchableOpacity>
+                  {!isBill && (
+                    <TouchableOpacity
+                      style={[s.circleBtn, shared && { opacity: 0.55 }]}
+                      onPress={shareToCircle}
+                      disabled={sharing || shared}
+                      activeOpacity={0.85}
+                    >
+                      {sharing
+                        ? <ActivityIndicator color={Colors.lime} size="small" />
+                        : <Text style={s.circleBtnTxt}>{shared ? '🌿 Shared with your circle' : 'Share to circle 🌿'}</Text>}
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity onPress={shareOutside} style={{ alignItems: 'center', paddingVertical: 6 }}>
                     <Text style={s.outsideTxt}>share outside ↗</Text>
                   </TouchableOpacity>
@@ -480,6 +535,8 @@ const s = StyleSheet.create({
   impactLabel: { fontFamily: Typography.headingBold, fontSize: 10 },
   equivRow: { borderLeftWidth: 2, borderLeftColor: 'rgba(45,212,191,0.5)', paddingLeft: 10 },
   equivTxt: { fontFamily: Typography.body, fontSize: 13.5, color: Colors.teal, fontStyle: 'italic', lineHeight: 19 },
+  billRow: { backgroundColor: 'rgba(252,211,77,0.07)', borderWidth: 0.5, borderColor: 'rgba(252,211,77,0.25)', borderRadius: 12, padding: 10 },
+  billTxt: { fontFamily: Typography.body, fontSize: 12, color: Colors.amber, lineHeight: 18 },
   deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 8 },
   deltaBase: { fontFamily: Typography.body, fontSize: 10, color: Colors.tx3, flex: 1 },
   deltaAmt: { fontFamily: Typography.headingBold, fontSize: 10 },
