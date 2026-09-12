@@ -83,3 +83,18 @@ Context: no commits since July 25. `main` is still at build #9/#11 (April 28). `
 5. **Section O** — targets.
 6. **Section P** — milestone notifications.
 7. **OBS-018** — get the schema back into version control before it drifts further.
+
+---
+
+## 2026-09-12 evening (build session — branch `v4-retention`)
+
+- **OBS-012** · **CLOSED.** `SignUpScreen` routed into the auth stack, reachable from PhoneScreen with the validated invite code carried forward. Redemption deferred through `src/lib/invite.ts` because email signup may withhold the session until confirmation.
+- **OBS-022** · bug · **NEW, and it was live.** Invite codes were never actually being marked used. `OTPVerifyScreen.redeemInviteCode` issued a direct UPDATE on `invite_codes`; the `invite_codes_own` policy is `USING (auth.uid() = owner_id)`, so a new user updating someone else's code matched zero rows. Postgres returns no error for an update that matches nothing, so the client logged success. Every code handed out was still reusable. Fixed via the `redeem_invite_code` SECURITY DEFINER RPC (migration 0002). **Worth auditing the live `invite_codes` table — the 2 codes recorded as spent in April may not be, and codes may have been used more than once.**
+- **OBS-013** · **CLOSED.** Three tabs, scope on the ring.
+- **OBS-014** · **CLOSED.** Shared extractor across all three AI paths.
+- **OBS-015** · **CLOSED.** `origin` column plus the nightly `observe-facts` pass.
+- **OBS-018** · **CLOSED** in structure. 0001 is reconstructed from code, not dumped — replace it with a real dump before trusting it.
+- **OBS-020** · **CLOSED.** Dead "Soon" buttons replaced by an honest source list in You.
+- **OBS-021** · **CLOSED.** Welcome copy matches the v3 product.
+- **OBS-023** · ops · `observe-facts` is deployed-ready but **not scheduled**. Migration 0005 enables pg_cron and pg_net; the schedule itself has to be created by hand because it needs the service key from Vault. Until that is done, no observed facts are ever written and Sections O and P have no baseline to build on.
+- **OBS-024** · data · The `analyze-activity` memory block is injected as JSON. It works, but as memory grows past ~20 facts this will start eating the prompt budget on the app's highest-traffic function. Revisit with a summarised memory string rather than raw JSON when fact counts climb.

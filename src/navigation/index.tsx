@@ -19,6 +19,7 @@ import SnapScreen from '../screens/activity/SnapScreen';
 import ActivityDetailScreen from '../screens/activity/ActivityDetailScreen';
 import LogActivityScreen from '../screens/activity/LogActivityScreen';
 import EcoChatScreen from '../screens/air/EcoChatScreen';
+import MemoryScreen from '../screens/you/MemoryScreen';
 
 // Section M (September 2026): 3 tabs + raised center camera.
 //
@@ -103,6 +104,7 @@ function MainNav() {
       <M.Screen name="ActivityDetail" component={ActivityDetailScreen} />
       <M.Screen name="LogActivity" component={LogActivityScreen} options={{ presentation: 'modal' }} />
       <M.Screen name="EcoChat" component={EcoChatScreen} options={{ presentation: 'modal' }} />
+      <M.Screen name="Memory" component={MemoryScreen} />
     </M.Navigator>
   );
 }

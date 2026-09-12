@@ -1,5 +1,10 @@
 import "@supabase/functions-js/edge-runtime.d.ts"
 
+// Section N (Sept 2026): manual logging is the majority path, so it has to
+// build memory too. Previously only eco-chat users ever accumulated any
+// (OBS-014). Extraction runs after the response, never in front of it.
+import { extractStatedFacts, readFacts, runInBackground } from "../_shared/facts.ts"
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -38,7 +43,19 @@ function isValidTimezone(tz: string): boolean {
   }
 }
 
-function buildSystemPrompt(timezone: string | undefined): string {
+function buildMemoryBlock(facts: any[]): string {
+  if (!facts || facts.length === 0) return ""
+  const stated = facts.filter((f) => f.origin !== "observed")
+  if (stated.length === 0) return ""
+  return `
+WHAT YOU KNOW ABOUT THIS USER (use it to calibrate every estimate — if they
+drive an EV, a car trip is THEIR car; if they are vegetarian, a meal is a veg
+meal unless they say otherwise. Never read this list back to them):
+${JSON.stringify(stated.map((f) => ({ [f.key]: f.value })))}
+`
+}
+
+function buildSystemPrompt(timezone: string | undefined, memoryBlock = ""): string {
   const tz = timezone && isValidTimezone(timezone) ? timezone : "UTC"
   const now = new Date()
   const localTime = new Intl.DateTimeFormat("en-US", {
@@ -58,7 +75,7 @@ CURRENT TIME (for resolving relative references like "this morning" or "since 7 
 - User's local time: ${localTime} (${tz})
 - UTC: ${isoUtc}
 `
-  return BASE_SYSTEM_PROMPT + "\n" + contextBlock
+  return BASE_SYSTEM_PROMPT + "\n" + contextBlock + memoryBlock
 }
 
 Deno.serve(async (req) => {
@@ -75,7 +92,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    const { messages, timezone } = await req.json()
+    const { messages, timezone, userId } = await req.json()
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(
@@ -84,7 +101,14 @@ Deno.serve(async (req) => {
       )
     }
 
-    const systemPrompt = buildSystemPrompt(timezone)
+    const supabaseUrlForFacts = Deno.env.get("SUPABASE_URL")
+    const serviceKeyForFacts = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+    const knownFacts =
+      userId && supabaseUrlForFacts && serviceKeyForFacts
+        ? await readFacts(supabaseUrlForFacts, serviceKeyForFacts, userId, 20)
+        : []
+
+    const systemPrompt = buildSystemPrompt(timezone, buildMemoryBlock(knownFacts))
 
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -111,6 +135,27 @@ Deno.serve(async (req) => {
     }
 
     const responseText = data.content?.[0]?.text || ""
+
+    // Memory: extract durable facts from what the user actually typed.
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+    if (userId && supabaseUrl && serviceKey) {
+      const lastUser = [...(messages || [])].reverse().find((m: any) => m?.role === "user")
+      const userText = typeof lastUser?.content === "string" ? lastUser.content : ""
+      if (userText) {
+        runInBackground(
+          extractStatedFacts({
+            anthropicKey,
+            supabaseUrl,
+            serviceKey,
+            userId,
+            userText,
+            source: "activity",
+            knownKeys: knownFacts.map((f: any) => f.key),
+          }),
+        )
+      }
+    }
 
     return new Response(
       JSON.stringify({ responseText }),

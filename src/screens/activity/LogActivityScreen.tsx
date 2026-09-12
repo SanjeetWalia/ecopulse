@@ -127,7 +127,7 @@ export default function LogActivityScreen({ navigation }: any) {
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke('analyze-activity', {
-        body: { messages: newHistory, timezone: profile?.timezone },
+        body: { messages: newHistory, timezone: profile?.timezone, userId: profile?.id },
       });
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);

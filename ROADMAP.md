@@ -45,8 +45,8 @@ The gap between v3 and the thesis is exactly stages 3 and 4. Everything in Secti
 
 - [ ] **S1. Build `redesign-v3` to TestFlight.** SDK 55 has never been runtime-verified; v3 has never been built. Verify together: ring animation (Reanimated 4), camera modal, date picker, focus/blur behavior (React 19), Snap persistence, eco-chat round trip, delete account RPC.
 - [ ] **S2. Merge the stack.** If S1 is clean: `sdk-54-upgrade` → `main`, then `redesign-v3` → `main`. Stop carrying two unmerged branches.
-- [ ] **S3. OBS-012 — route email signup.** `SignUpScreen.tsx` exists and is unrouted. Add it to the post-invite-code path in `src/navigation/index.tsx`. Blocks Beta App Review → blocks external testers → blocks launch. Open since April 28.
-- [ ] **S4. Schema into version control (OBS-018).** Create `supabase/migrations/`, dump the live schema, commit `delete_account.sql`. The v3 tables exist only in the dashboard.
+- [x] **S3. OBS-012 — route email signup** — SHIPPED Sept 12. `SignUpScreen.tsx` exists and is unrouted. Add it to the post-invite-code path in `src/navigation/index.tsx`. Blocks Beta App Review → blocks external testers → blocks launch. Open since April 28.
+- [x] **S4. Schema into version control (OBS-018)** — SHIPPED Sept 12. 0001 is reconstructed; dump the real baseline to replace it. Create `supabase/migrations/`, dump the live schema, commit `delete_account.sql`. The v3 tables exist only in the dashboard.
 
 ---
 
@@ -62,13 +62,13 @@ The gap between v3 and the thesis is exactly stages 3 and 4. Everything in Secti
 | Pulse | Am I trending, and who is with me? |
 | You | What does the app know, what am I aiming at, what do I pay? |
 
-- [ ] M1. **Collapse to 3 tabs + center camera.** Today · Pulse · You. Camera stays center — it is input, not a destination.
-- [ ] M2. **Scope control on the ring.** Tapping the ring cycles Today / Week / Month / Year in place. This single control removes the entire reason Air and Pulse held different windows.
-- [ ] M3. **Absorb Air into Today, below the fold.** Composition bar + contribution rows + optimizer become a scroll-down section of Today, in this order: ring → Moko-Avi line → today's flow → where your air went → optimizer. Composition is the answer to "why is my number what it is," so it belongs directly under the number, not one tab away.
-- [ ] M4. **Promote eco-chat out of tab space.** Chat is the interpretation layer, not a destination. Entry point: tap Moko-Avi's line on Today. It opens as a modal over Today, same presentation as Snap.
-- [ ] M5. **"Unclaimed air" moves to You → Sources.** A permanent, honest list of data sources with real states (connected / not connected / coming). Removes the two dead "Soon" buttons from the main surface (OBS-020).
+- [x] M1. **Collapse to 3 tabs + center camera** — SHIPPED. Today · Pulse · You. Camera stays center — it is input, not a destination.
+- [x] M2. **Scope control on the ring** — SHIPPED, plus a pill row spelling out the same control. Tapping the ring cycles Today / Week / Month / Year in place. This single control removes the entire reason Air and Pulse held different windows.
+- [x] M3. **Absorb Air into Today, below the fold** — SHIPPED. AirScreen unrouted, not deleted. Composition bar + contribution rows + optimizer become a scroll-down section of Today, in this order: ring → Moko-Avi line → today's flow → where your air went → optimizer. Composition is the answer to "why is my number what it is," so it belongs directly under the number, not one tab away.
+- [x] M4. **Promote eco-chat out of tab space** — SHIPPED. Modal off Moko-Avi's line. Chat is the interpretation layer, not a destination. Entry point: tap Moko-Avi's line on Today. It opens as a modal over Today, same presentation as Snap.
+- [x] M5. **"Unclaimed air" moves to You → Sources** — SHIPPED, with honest ON / NOT YET states (OBS-020 closed). A permanent, honest list of data sources with real states (connected / not connected / coming). Removes the two dead "Soon" buttons from the main surface (OBS-020).
 - [ ] M6. **Pulse keeps time + circle.** Trend sparkline, period totals, circle feed, EcoKey invites. Unchanged.
-- [ ] M7. **You gains three sections:** Memory (Section N), Targets (Section O), Notifications (Section P), alongside Membership and Account.
+- [~] M7. **You gains three sections:** Memory shipped. Targets and Notifications pending Sections O and P. Memory (Section N), Targets (Section O), Notifications (Section P), alongside Membership and Account.
 
 **Optional harder cut (decide in X11):** 2 tabs — Today and Circle — with You behind the header avatar. Defensible, but destructive to do at the same time as M1-M7. Ship 3 tabs first, measure, then decide.
 
@@ -78,11 +78,11 @@ The gap between v3 and the thesis is exactly stages 3 and 4. Everything in Secti
 
 **Current state:** `user_facts` exists and works, but only `eco-chat` writes to it, and it stores only what the user *said*.
 
-- [ ] N1. **Extract memory on every AI path, not just chat (OBS-014).** Run the same fact-extraction pass in `analyze-activity` and `analyze-food-photo`. A user who only snaps and logs should still build a memory.
-- [ ] N2. **Split stated from observed (OBS-015).** Add `source` (`stated` | `observed`) and `confidence` to `user_facts`. Stated = the user told you. Observed = the app computed it. Never let an observed inference masquerade as something the user said.
-- [ ] N3. **Write observed facts nightly.** Personal baseline (rolling 10-day), typical weekday vs weekend, per-category personal averages, dominant transport mode, logging cadence. These are what make the optimizer personal instead of rule-based.
-- [ ] N4. **Make memory visible and editable.** You → "What Eco Pulse remembers": a plain list of facts, each deletable, each showing whether it was told or observed. Users trust what they can correct, and this is the cheapest possible answer to an App Store privacy question.
-- [ ] N5. **Calibrate the numbers with memory.** Their actual vehicle drives the transport factor. Their electricity bill drives the home-energy factor. Their diet shapes food comparisons. Memory that does not change a number is decoration.
+- [x] N1. **Extract memory on every AI path (OBS-014)** — SHIPPED. `supabase/functions/_shared/facts.ts` is now used by eco-chat, analyze-activity and analyze-food-photo. Run the same fact-extraction pass in `analyze-activity` and `analyze-food-photo`. A user who only snaps and logs should still build a memory.
+- [x] N2. **Split stated from observed (OBS-015)** — SHIPPED. `origin`, `confidence` and `last_confirmed_at` on `user_facts` (migration 0004). Add `source` (`stated` | `observed`) and `confidence` to `user_facts`. Stated = the user told you. Observed = the app computed it. Never let an observed inference masquerade as something the user said.
+- [x] N3. **Write observed facts nightly** — SHIPPED. `observe-facts` edge function writes personal_baseline, category_mix, logging_cadence and weekday_vs_weekend behind the same 10-day gate Moko-Avi uses. **Still needs scheduling** — see migration 0005. Personal baseline (rolling 10-day), typical weekday vs weekend, per-category personal averages, dominant transport mode, logging cadence. These are what make the optimizer personal instead of rule-based.
+- [x] N4. **Make memory visible and editable** — SHIPPED. You → What Eco Pulse remembers, split into told vs worked out, every line deletable. You → "What Eco Pulse remembers": a plain list of facts, each deletable, each showing whether it was told or observed. Users trust what they can correct, and this is the cheapest possible answer to an App Store privacy question.
+- [x] N5. **Calibrate the numbers with memory** — PARTIAL. analyze-activity and analyze-food-photo now receive stated facts in the system prompt. Emission factors are still model-estimated rather than computed from the vehicle record. Their actual vehicle drives the transport factor. Their electricity bill drives the home-energy factor. Their diet shapes food comparisons. Memory that does not change a number is decoration.
 - [ ] N6. **Confirm, don't accumulate.** Facts older than ~90 days get one gentle re-confirmation in chat ("still the Civic?"). Stale memory is worse than no memory.
 - [ ] N7. **Memory feeds targets and milestones.** Section O proposes targets from the observed baseline; Section P detects milestones against it. N3 is a hard dependency for both.
 

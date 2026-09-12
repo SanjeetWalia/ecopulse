@@ -13,7 +13,13 @@ import "@supabase/functions-js/edge-runtime.d.ts"
 //      bill's CO₂ across its billing days.
 //   3. Keeps v3's fixes: valid categories only, "equivalent" field.
 //
+// Section N (Sept 2026): a typed correction is the user speaking, so it now
+// feeds the shared extractor. The photo itself never does — a model's reading
+// of an image is not the user telling us anything (OBS-015).
+//
 // Deploy: supabase functions deploy analyze-food-photo --no-verify-jwt
+
+import { extractStatedFacts, runInBackground } from "../_shared/facts.ts"
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -147,10 +153,28 @@ Deno.serve(async (req) => {
             fact_type: "home_energy",
             value: { kwh: parsed.bill.kwh, period_days: parsed.bill.period_days, noted_at: new Date().toISOString() },
             source: "bill",
+            origin: "stated",
+            confidence: 0.95,
             updated_at: new Date().toISOString(),
+            last_confirmed_at: new Date().toISOString(),
           }]),
         })
       } catch { /* best-effort */ }
+    }
+
+    // A correction is the user in their own words — extract from it.
+    if (userId && supabaseUrl && serviceKey && typeof correction === "string" && correction.trim()) {
+      runInBackground(
+        extractStatedFacts({
+          anthropicKey,
+          supabaseUrl,
+          serviceKey,
+          userId,
+          userText: correction,
+          source: "photo",
+          knownKeys: facts.map((f: any) => f.key),
+        }),
+      )
     }
 
     return new Response(

@@ -34,7 +34,7 @@ const SOURCES: { key: string; icon: string; title: string; sub: string; state: '
   { key: 'bill',   icon: '⚡', title: 'Electricity bill', sub: 'Snap one and home energy joins your number',   state: 'off' },
 ];
 
-export default function YouScreen() {
+export default function YouScreen({ navigation }: any) {
   const { profile } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [deleting, setDeleting] = useState(false);
@@ -138,6 +138,18 @@ export default function YouScreen() {
           <Text style={s.planDesc}>
             The full breath — Optimizer, every passive source, unlimited chat memory, weekly journals.
           </Text>
+        </TouchableOpacity>
+
+        {/* Memory (N4) — visible and editable, because a memory layer the
+            user cannot correct is one they have to take on faith. */}
+        <Text style={s.sect}>MEMORY</Text>
+        <TouchableOpacity style={s.setRow} onPress={() => navigation.navigate('Memory')} activeOpacity={0.7}>
+          <Text style={s.setIcon}>🧠</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.setL1}>What Eco Pulse remembers</Text>
+            <Text style={s.setL2}>Everything it knows about you, and a way to remove it</Text>
+          </View>
+          <Text style={s.chev}>›</Text>
         </TouchableOpacity>
 
         {/* Sources — moved off the main surface (M5).
@@ -256,6 +268,7 @@ const s = StyleSheet.create({
     marginBottom: 7,
   },
   setIcon: { fontSize: 15 },
+  chev: { fontFamily: Typography.headingBold, fontSize: 18, color: Colors.tx3 },
   srcPill: { borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
   srcPillOn: { borderColor: Colors.border2, backgroundColor: 'rgba(200,244,90,0.12)' },
   srcPillTxt: { fontFamily: Typography.headingBold, fontSize: 8.5, color: Colors.tx3, letterSpacing: 1 },

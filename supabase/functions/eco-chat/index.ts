@@ -10,7 +10,14 @@
 //   3. Gently invites the user to snap their electricity bill when no
 //      bill is on record — at most occasionally, never nagging.
 //
+// Section N (Sept 2026): extraction moved to ../_shared/facts.ts so the
+// snap and manual-logging paths build memory too — previously only users who
+// opened chat ever accumulated any (OBS-014). Facts now carry an origin, so a
+// nightly observation can never be mistaken for something the user said.
+//
 // Deploy: supabase functions deploy eco-chat --no-verify-jwt
+
+import { extractStatedFacts, runInBackground } from "../_shared/facts.ts";
 
 // @ts-ignore Deno runtime
 Deno.serve(async (req) => {
@@ -110,45 +117,18 @@ ${JSON.stringify({
       { user_id: userId, role: "assistant", content: reply },
     ]);
 
-    // ── 5. Fact extraction (best effort — reply already succeeded) ─
-    try {
-      const extractPrompt = `From this user message, extract durable personal facts relevant to carbon footprint calibration. Respond with ONLY a JSON array (no markdown). Each item: {"key":"snake_case_stable_key","fact_type":"vehicle|diet|home_energy|household|habit|other","value":{...}}.
-Durable = stable life facts: their car/vehicle ("vehicle", e.g. key "vehicle" value {"make":"Honda","model":"Civic","year":2019,"fuel":"petrol"}), diet pattern ("diet"), home heating/energy setup ("home_energy"), household size ("household"), recurring habits ("habit").
-NOT durable: one-off meals, single trips, questions, opinions. If nothing durable, respond [].
-Known fact keys (do not re-extract unless the user changed them): ${JSON.stringify(facts.map((f: any) => f.key))}
-
-User message: "${userMessage.replace(/"/g, '\\"')}"`;
-
-      const extraction = await callClaude(anthropicKey, "You extract structured facts. JSON only.", [
-        { role: "user", content: extractPrompt },
-      ], 300);
-
-      if (extraction) {
-        const s = extraction.indexOf("[");
-        const e = extraction.lastIndexOf("]");
-        if (s !== -1 && e !== -1) {
-          const items = JSON.parse(extraction.slice(s, e + 1));
-          if (Array.isArray(items) && items.length > 0) {
-            const rows = items
-              .filter((i: any) => i && typeof i.key === "string" && i.value !== undefined)
-              .slice(0, 5)
-              .map((i: any) => ({
-                user_id: userId,
-                key: String(i.key).slice(0, 60),
-                fact_type: ["vehicle","diet","home_energy","household","habit","other"].includes(i.fact_type) ? i.fact_type : "other",
-                value: i.value,
-                source: "chat",
-                updated_at: new Date().toISOString(),
-              }));
-            if (rows.length > 0) {
-              await sbUpsert(supabaseUrl, serviceKey, "user_facts", rows, "user_id,key");
-            }
-          }
-        }
-      }
-    } catch {
-      // Memory extraction is best-effort.
-    }
+    // ── 5. Fact extraction (best effort, and off the reply path) ──
+    runInBackground(
+      extractStatedFacts({
+        anthropicKey,
+        supabaseUrl,
+        serviceKey,
+        userId,
+        userText: userMessage,
+        source: "chat",
+        knownKeys: facts.map((f: any) => f.key),
+      }),
+    );
 
     return json({ reply });
   } catch (err) {
