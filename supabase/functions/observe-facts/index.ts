@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
 
     const loggedDays = days.filter((r) => Number(r.activity_count || 0) > 0).length;
 
-    const facts = [
+    const facts: { key: string; fact_type: string; value: Record<string, unknown>; confidence: number }[] = [
       {
         key: "personal_baseline",
         fact_type: "habit",
