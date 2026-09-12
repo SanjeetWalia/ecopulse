@@ -23,6 +23,17 @@ import { Colors, Typography } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/authStore';
 
+// Every input the number can have, and whether it is actually feeding it.
+// Nothing here claims a date it cannot keep.
+const SOURCES: { key: string; icon: string; title: string; sub: string; state: 'on' | 'off' }[] = [
+  { key: 'snap',   icon: '📷', title: 'Snap',           sub: 'Photograph a meal and it is counted',           state: 'on' },
+  { key: 'manual', icon: '✏️', title: 'Logging by hand', sub: 'Describe anything in your own words',           state: 'on' },
+  { key: 'chat',   icon: '🌱', title: 'Eco-chat',        sub: 'What you tell it calibrates your numbers',      state: 'on' },
+  { key: 'health', icon: '🍎', title: 'Apple Health',    sub: 'Walks and rides, counted without a tap',        state: 'off' },
+  { key: 'trips',  icon: '🗺️', title: 'Trip history',    sub: 'Miles driven, seen automatically',              state: 'off' },
+  { key: 'bill',   icon: '⚡', title: 'Electricity bill', sub: 'Snap one and home energy joins your number',   state: 'off' },
+];
+
 export default function YouScreen() {
   const { profile } = useAuthStore();
   const insets = useSafeAreaInsets();
@@ -129,6 +140,26 @@ export default function YouScreen() {
           </Text>
         </TouchableOpacity>
 
+        {/* Sources — moved off the main surface (M5).
+            v3 showed these as two dead "Soon" buttons on AirScreen, which
+            reads as abandonment rather than a roadmap (OBS-020). An honest
+            connected / not-connected list belongs here instead. */}
+        <Text style={s.sect}>WHERE YOUR NUMBER COMES FROM</Text>
+        {SOURCES.map((src) => (
+          <View key={src.key} style={s.setRow}>
+            <Text style={s.setIcon}>{src.icon}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.setL1}>{src.title}</Text>
+              <Text style={s.setL2}>{src.sub}</Text>
+            </View>
+            <View style={[s.srcPill, src.state === 'on' && s.srcPillOn]}>
+              <Text style={[s.srcPillTxt, src.state === 'on' && s.srcPillTxtOn]}>
+                {src.state === 'on' ? 'ON' : 'NOT YET'}
+              </Text>
+            </View>
+          </View>
+        ))}
+
         {/* Account */}
         <Text style={s.sect}>ACCOUNT</Text>
         <View style={s.setRow}>
@@ -225,6 +256,10 @@ const s = StyleSheet.create({
     marginBottom: 7,
   },
   setIcon: { fontSize: 15 },
+  srcPill: { borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  srcPillOn: { borderColor: Colors.border2, backgroundColor: 'rgba(200,244,90,0.12)' },
+  srcPillTxt: { fontFamily: Typography.headingBold, fontSize: 8.5, color: Colors.tx3, letterSpacing: 1 },
+  srcPillTxtOn: { color: Colors.lime },
   setL1: { fontFamily: Typography.headingBold, fontSize: 13, color: Colors.tx },
   setL2: { fontFamily: Typography.body, fontSize: 10.5, color: Colors.tx3, marginTop: 2 },
 

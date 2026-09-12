@@ -13,24 +13,37 @@ import SignInScreen from '../screens/auth/SignInScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 import HomeScreen from '../screens/home/HomeScreen';
-import AirScreen from '../screens/air/AirScreen';
 import PulseScreen from '../screens/pulse/PulseScreen';
 import YouScreen from '../screens/you/YouScreen';
 import SnapScreen from '../screens/activity/SnapScreen';
 import ActivityDetailScreen from '../screens/activity/ActivityDetailScreen';
 import LogActivityScreen from '../screens/activity/LogActivityScreen';
+import EcoChatScreen from '../screens/air/EcoChatScreen';
 
-// Redesign v3 (July 2026): 4 tabs + raised center camera.
-// Snap presents as a sheet modal — swipe down to dismiss.
-// Legacy screens (ProfileScreen, Habits, Explore, GiftPlant, Messages,
-// Conversation, WeeklyWrapped, MomentsFeed, CarbonChallenge, Settings)
-// are UNROUTED, not deleted. Code preserved in src/screens.
+// Section M (September 2026): 3 tabs + raised center camera.
+//
+// v3 shipped four tabs, three of which showed the same number in different
+// timeframes — Home was today, Air was this month, Pulse was week/month/year.
+// A tab should answer a different question, not a different window of the same
+// answer (OBS-013). The scope now lives on the ring inside Today, and Air's
+// content moved below the fold there.
+//
+//   Today — how am I doing right now, and why?
+//   Pulse — am I trending, and who is with me?
+//   You   — what does the app know, what am I aiming at, what do I pay?
+//
+// Camera stays centered: it is input, not a destination. Eco-chat is a modal
+// off Moko-Avi's line, for the same reason.
+//
+// Legacy screens (AirScreen, ProfileScreen, Habits, Explore, GiftPlant,
+// Messages, Conversation, WeeklyWrapped, MomentsFeed, CarbonChallenge,
+// Settings) are UNROUTED, not deleted. Code preserved in src/screens.
 
 const A = createNativeStackNavigator();
 const M = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-const ICONS: Record<string, string> = { Home: '⌂', Air: '≈', Pulse: '∿', You: '○' };
+const ICONS: Record<string, string> = { Today: '◉', Pulse: '∿', You: '○' };
 
 function TabBar({ state, navigation }: any) {
   const renderTab = (route: any, index: number) => {
@@ -64,6 +77,9 @@ function TabBar({ state, navigation }: any) {
           </TouchableOpacity>
         </View>
         {state.routes.slice(2).map((r: any, i: number) => renderTab(r, i + 2))}
+        {/* Keeps the camera centred now that the right side holds one tab
+            instead of two. */}
+        <View style={s.tabItem} pointerEvents="none" />
       </View>
     </View>
   );
@@ -72,8 +88,7 @@ function TabBar({ state, navigation }: any) {
 function MainTabs() {
   return (
     <Tab.Navigator tabBar={(p) => <TabBar {...p} />} screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Air" component={AirScreen} />
+      <Tab.Screen name="Today" component={HomeScreen} />
       <Tab.Screen name="Pulse" component={PulseScreen} />
       <Tab.Screen name="You" component={YouScreen} />
     </Tab.Navigator>
@@ -87,6 +102,7 @@ function MainNav() {
       <M.Screen name="Snap" component={SnapScreen} options={{ presentation: 'modal' }} />
       <M.Screen name="ActivityDetail" component={ActivityDetailScreen} />
       <M.Screen name="LogActivity" component={LogActivityScreen} options={{ presentation: 'modal' }} />
+      <M.Screen name="EcoChat" component={EcoChatScreen} options={{ presentation: 'modal' }} />
     </M.Navigator>
   );
 }
