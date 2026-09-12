@@ -114,15 +114,15 @@ export default function WelcomeScreen({ navigation }: any) {
               <Text style={styles.logoEmoji}>🌿</Text>
             </View>
             <Text style={styles.wordmark}>eco<Text style={styles.wordmarkAccent}>pulse</Text></Text>
-            <Text style={styles.tagline}>Track your carbon. Challenge friends.</Text>
+            <Text style={styles.tagline}>See the air you give back.</Text>
           </View>
 
           {/* Feature pills */}
           <View style={styles.features}>
             {[
-              { icon: '📊', label: 'Auto-track your daily CO₂e' },
-              { icon: '👥', label: 'Compete on a green leaderboard' },
-              { icon: '🌱', label: 'Gift plants for hitting goals' },
+              { icon: '🌿', label: 'See the air you give back, daily' },
+              { icon: '📷', label: 'Snap a meal or log a trip in seconds' },
+              { icon: '✨', label: 'Moko-Avi reads your week back to you' },
               { icon: '🔑', label: 'Private beta — invite only' },
             ].map((f, i) => (
               <View key={i} style={styles.featurePill}>

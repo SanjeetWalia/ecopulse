@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { redeemInvite } from './invite';
 
 export interface Profile {
   id: string;
@@ -74,6 +75,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (session?.user) {
       await get().fetchProfile(session.user.id);
+      // Email signups cannot redeem at signup time (no session until the
+      // address is confirmed), so a stashed code is redeemed here on the
+      // first authenticated launch. No-ops when nothing is stashed.
+      redeemInvite();
     }
 
     // Listen for auth changes
@@ -81,6 +86,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ session, user: session?.user ?? null });
       if (session?.user) {
         await get().fetchProfile(session.user.id);
+        redeemInvite();
       } else {
         set({ profile: null });
       }

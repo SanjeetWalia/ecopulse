@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
+import { redeemInvite } from '../../lib/invite';
 import { useAuthStore } from '../../lib/authStore';
 
 export default function OTPVerifyScreen({ navigation, route }: any) {
@@ -40,24 +41,13 @@ export default function OTPVerifyScreen({ navigation, route }: any) {
       inputRefs.current[index - 1]?.focus();
   };
 
-  // Mark the invite code as used after successful auth
-  async function redeemInviteCode(userId: string) {
+  // Mark the invite code as used after successful auth.
+  // Goes through the redeem_invite_code RPC — a direct UPDATE here matched
+  // zero rows under the invite_codes_own RLS policy and silently no-opped
+  // (OBS-022). See src/lib/invite.ts.
+  async function redeemInviteCode(_userId: string) {
     if (!inviteCodeId) return; // existing users re-signing in have no code
-
-    try {
-      await supabase
-        .from('invite_codes')
-        .update({
-          status:  'used',
-          used_by: userId,
-          uses:    1,
-        })
-        .eq('id', inviteCodeId)
-        .eq('status', 'unused'); // safety: only update if still unused
-    } catch (e) {
-      // Non-fatal — user is already in, don't block them
-      console.warn('Could not mark invite code as used:', e);
-    }
+    await redeemInvite(inviteCodeId);
   }
 
   const verifyOTP = async (otpCode: string) => {

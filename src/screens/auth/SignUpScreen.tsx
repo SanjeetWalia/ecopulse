@@ -1,4 +1,12 @@
 // src/screens/auth/SignUpScreen.tsx
+//
+// Email + password account creation, reached from the post-invite-code flow.
+// This is the path Apple Beta App Review needs: reviewers cannot receive an
+// SMS OTP, so phone-only signup made external review impossible (OBS-012).
+//
+// The invite code is stashed locally rather than redeemed here, because
+// Supabase may withhold the session until the email is confirmed. See
+// src/lib/invite.ts.
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -18,12 +26,16 @@ import * as Haptics from 'expo-haptics';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { signUpWithEmail } from '../../lib/supabase';
+import { stashPendingInvite, redeemInvite } from '../../lib/invite';
 
 type Props = {
   navigation: NativeStackNavigationProp<any>;
+  route?: any;
 };
 
-export default function SignUpScreen({ navigation }: Props) {
+export default function SignUpScreen({ navigation, route }: Props) {
+  const inviteCode   = route?.params?.inviteCode;
+  const inviteCodeId = route?.params?.inviteCodeId;
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -58,21 +70,36 @@ export default function SignUpScreen({ navigation }: Props) {
     setErrors({});
     setLoading(true);
 
-    const { error } = await signUpWithEmail(email, password, fullName, username.toLowerCase());
+    // Stash before the network call: if the app is killed mid-confirmation,
+    // the code is still redeemed on the next authenticated launch.
+    if (inviteCodeId) {
+      await stashPendingInvite({ id: inviteCodeId, code: inviteCode ?? '' });
+    }
+
+    const { data, error } = await signUpWithEmail(email, password, fullName, username.toLowerCase());
 
     setLoading(false);
 
     if (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Sign up failed', error.message);
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        'Check your email! 📬',
-        `We sent a confirmation to ${email}. Click the link to activate your account.`,
-        [{ text: 'Got it', onPress: () => navigation.navigate('SignIn') }]
-      );
+      return;
     }
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    if (data?.session) {
+      // Email confirmation is off — we already have a session. Redeem now;
+      // the auth listener in authStore moves the user into the app.
+      await redeemInvite(inviteCodeId);
+      return;
+    }
+
+    Alert.alert(
+      'Check your email',
+      `We sent a confirmation link to ${email}. Open it, then sign in with this email and password.`,
+      [{ text: 'Got it', onPress: () => navigation.navigate('SignIn') }]
+    );
   };
 
   return (
@@ -94,8 +121,16 @@ export default function SignUpScreen({ navigation }: Props) {
         <View style={styles.header}>
           <Text style={styles.title}>Join Eco Pulse</Text>
           <Text style={styles.subtitle}>
-            Start tracking your carbon footprint and competing with friends
+            Create your account with an email and password. You can sign in on
+            any device with these.
           </Text>
+          {inviteCode ? (
+            <View style={styles.codeConfirm}>
+              <Text style={styles.codeConfirmText}>
+                🔑 EcoKey <Text style={styles.codeConfirmCode}>{inviteCode}</Text> ready
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Form */}
@@ -163,7 +198,7 @@ export default function SignUpScreen({ navigation }: Props) {
             {loading ? (
               <ActivityIndicator color="#071810" />
             ) : (
-              <Text style={styles.submitText}>Create account 🌿</Text>
+              <Text style={styles.submitText}>Create account →</Text>
             )}
           </LinearGradient>
         </TouchableOpacity>
@@ -227,6 +262,9 @@ const styles = StyleSheet.create({
   backBtn: { marginBottom: Spacing.xxl },
   backIcon: { fontSize: 24, color: Colors.tx2 },
   header: { marginBottom: Spacing.xxxl, gap: Spacing.sm },
+  codeConfirm: { alignSelf: 'flex-start', marginTop: Spacing.sm, backgroundColor: 'rgba(200,244,90,0.10)', borderWidth: 0.5, borderColor: 'rgba(200,244,90,0.25)', borderRadius: Radius.md, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md },
+  codeConfirmText: { fontFamily: Typography.body, fontSize: 13, color: Colors.tx2 },
+  codeConfirmCode: { fontFamily: Typography.headingBold, color: Colors.lime, letterSpacing: 1 },
   title: { fontFamily: Typography.heading, fontSize: 28, color: Colors.tx, letterSpacing: -0.5 },
   subtitle: { fontFamily: Typography.body, fontSize: 14, color: Colors.tx2, lineHeight: 22 },
   form: { gap: Spacing.lg, marginBottom: Spacing.xxl },

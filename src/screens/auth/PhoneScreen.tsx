@@ -99,8 +99,11 @@ export default function PhoneScreen({ navigation, route }: any) {
           </LinearGradient>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.emailFallback} onPress={() => navigation.navigate('SignIn')}>
-          <Text style={styles.emailFallbackText}>Use email instead</Text>
+        <TouchableOpacity
+          style={styles.emailFallback}
+          onPress={() => navigation.navigate('SignUp', { inviteCode, inviteCodeId })}
+        >
+          <Text style={styles.emailFallbackText}>Sign up with email instead</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

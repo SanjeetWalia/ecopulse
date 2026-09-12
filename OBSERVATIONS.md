@@ -54,3 +54,32 @@ Longer-horizon (post-TestFlight):
 - Weather integration for Moko-Avi (v1.2 per roadmap).
 - Timeline API integration (v1.2 per roadmap).
 - B2B minimum dashboard (post-launch, Q3-Q4 2026 if consumer v1 sticks and OBS-011 validates demand).
+
+---
+
+## 2026-09-12 (repo audit after a 7-week gap — redesign-v3 branch)
+
+Context: no commits since July 25. `main` is still at build #9/#11 (April 28). `sdk-54-upgrade` (SDK 55) and `redesign-v3` (4 commits, ~6.5k lines) are both pushed and both unmerged. ROADMAP.md and OBSERVATIONS.md had not been updated since April 24, so they described a product that no longer exists in the code. This entry closes that gap.
+
+- **OBS-012** · bug · **STILL OPEN.** Email signup missing after invite code. `src/navigation/index.tsx` registers only `Welcome → Phone → OTPVerify → ProfileSetup`. `SignUpScreen.tsx` and `ForgotPasswordScreen.tsx` exist but `SignUpScreen` is not routed. No auth file has been touched since April 22. This still blocks Apple Beta App Review, which still blocks external TestFlight testers. It is the single oldest unresolved blocker in the project — 4.5 months.
+- **OBS-013** · ux · **Tab structure splits one number across three tabs by timeframe.** Home shows given-back *today*, Air shows given-back *this month*, Pulse shows *week/month/year*. The user has to learn which tab holds which window of the same metric. A tab should answer a different question, not a different timeframe of the same answer. Maps to new Section M.
+- **OBS-014** · data · **Memory only grows through chat.** `user_facts` extraction lives solely in `supabase/functions/eco-chat/index.ts`. A user who never opens eco-chat has an empty memory forever, so calibration never improves for the majority path (Snap + manual logging). Extraction needs to run on `analyze-activity` and `analyze-food-photo` too. Maps to new Section N.
+- **OBS-015** · data · **No distinction between stated and observed facts.** `user_facts` holds only what the user said. The app never writes back what it has *seen* (personal baseline, typical weekday, per-category averages), so the optimizer in AirScreen is still rule-based rather than personalized. Needs a `source` discriminator (`stated` | `observed`) or a sibling table. Maps to Section N.
+- **OBS-016** · idea · **No targets anywhere.** No `targets`/`goals` table, no UI. The app measures but never asks the user what they are aiming at, so there is nothing to close a loop against and no natural reason to return on a weekly cadence. Maps to new Section O.
+- **OBS-017** · bug · **No notification infrastructure at all.** `expo-notifications` is not in `package.json`, there is no `push_tokens` table, no APNs key configured in EAS, and no scheduled job on Supabase. Every milestone the app could recognise is invisible once the app is closed. Maps to new Section P.
+- **OBS-018** · data · **No `supabase/migrations/` directory.** Schema lives in `supabase_schema.sql` (April 4, now stale) plus ad-hoc SQL applied through the dashboard (`delete_account.sql` is referenced in a YouScreen comment but the file is not in the repo). The v3 work added `snaps`, `shared_snaps`, `leaves`, `eco_chat_messages`, `user_facts`, friendships — none of it captured in version control. A rebuild from this repo would not reproduce the database.
+- **OBS-019** · ops · **Two unmerged branches stacked on each other, neither runtime-tested through TestFlight.** `redesign-v3` sits on top of `sdk-54-upgrade`. The SDK 55 upgrade has still never been runtime-verified on device per the April handoff, and the v3 redesign has never been built at all. Risk compounds: a Reanimated 4 / React 19 regression and a v3 layout bug would surface in the same build with no clean bisect point.
+- **OBS-020** · ux · **AirScreen ships two dead "Soon" buttons** ("Your walks and rides go uncounted", "Your trips are invisible"). Shipping visible unavailable features to beta users reads as abandonment rather than a roadmap. Either wire Apple Health (X10, still not started) or convert these to a single honest "what's coming" line.
+- **OBS-021** · copy · Onboarding copy rewrite (April queue item) is still unshipped. WelcomeScreen still describes leaderboards and friend competition, which now contradicts the v3 product even more than it did in April, since v3 reframed everything around "air given back" rather than competition.
+
+---
+
+## Next-session priorities (revised 2026-09-12)
+
+1. **Runtime-test the stack.** Build `redesign-v3` to TestFlight, verify SDK 55 + v3 together on device. Nothing else is safe until this passes.
+2. **OBS-012.** Route `SignUpScreen` into the post-invite flow. Unblocks Beta App Review and external testers.
+3. **Section M** — collapse 4 tabs to 3, scope control on the ring.
+4. **Section N** — memory beyond chat; stated vs observed.
+5. **Section O** — targets.
+6. **Section P** — milestone notifications.
+7. **OBS-018** — get the schema back into version control before it drifts further.

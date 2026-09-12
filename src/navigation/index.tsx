@@ -10,6 +10,7 @@ import PhoneScreen from '../screens/auth/PhoneScreen';
 import OTPVerifyScreen from '../screens/auth/OTPVerifyScreen';
 import ProfileSetupScreen from '../screens/auth/ProfileSetupScreen';
 import SignInScreen from '../screens/auth/SignInScreen';
+import SignUpScreen from '../screens/auth/SignUpScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 import HomeScreen from '../screens/home/HomeScreen';
 import AirScreen from '../screens/air/AirScreen';
@@ -98,6 +99,7 @@ function AuthNav() {
       <A.Screen name="OTPVerify" component={OTPVerifyScreen} />
       <A.Screen name="ProfileSetup" component={ProfileSetupScreen} />
       <A.Screen name="SignIn" component={SignInScreen} />
+      <A.Screen name="SignUp" component={SignUpScreen} />
       <A.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </A.Navigator>
   );
