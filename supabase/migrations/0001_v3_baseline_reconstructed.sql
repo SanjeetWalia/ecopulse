@@ -12,51 +12,57 @@
 ALTER TABLE public.invite_codes
   ADD COLUMN IF NOT EXISTS status  TEXT DEFAULT 'unused',
   ADD COLUMN IF NOT EXISTS used_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS batch   INTEGER DEFAULT 1;
+
+-- Production has owner_id NULLABLE: the 20 hand-generated beta codes have no
+-- owner. The April baseline declared it NOT NULL, so a rebuild from that file
+-- would reject the real data.
+ALTER TABLE public.invite_codes ALTER COLUMN owner_id DROP NOT NULL;
 
 -- ─── shared_snaps: the Circle feed ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.shared_snaps (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id     UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   activity_id UUID REFERENCES public.activities(id) ON DELETE SET NULL,
   label       TEXT NOT NULL,
-  co2_kg      NUMERIC NOT NULL DEFAULT 0,
+  co2_kg      NUMERIC NOT NULL,
   photo_path  TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS shared_snaps_user_created_idx
   ON public.shared_snaps (user_id, created_at DESC);
 
 -- ─── leaves: one per person per shared snap ────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.leaves (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   snap_id    UUID NOT NULL REFERENCES public.shared_snaps(id) ON DELETE CASCADE,
   user_id    UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (snap_id, user_id)
 );
 
 -- ─── eco_chat_messages: conversation history for the eco-chat function ─────
 CREATE TABLE IF NOT EXISTS public.eco_chat_messages (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id    UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   role       TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
   content    TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS eco_chat_messages_user_created_idx
   ON public.eco_chat_messages (user_id, created_at DESC);
 
 -- ─── user_facts: the memory layer ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.user_facts (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id    UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   key        TEXT NOT NULL,
-  fact_type  TEXT NOT NULL DEFAULT 'other'
-             CHECK (fact_type IN ('vehicle','diet','home_energy','household','habit','other')),
-  value      JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  fact_type  TEXT NOT NULL DEFAULT 'other',
+  value      JSONB NOT NULL,
+  source     TEXT NOT NULL DEFAULT 'chat',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (user_id, key)
 );
 CREATE INDEX IF NOT EXISTS user_facts_user_updated_idx
@@ -85,6 +91,28 @@ ALTER TABLE public.user_facts        ENABLE ROW LEVEL SECURITY;
 -- The push failed loudly on that, which is the argument for committing schema
 -- rather than reconstructing it (OBS-018).
 
+-- The real policies use a helper, are_friends(uuid, uuid), which is not in
+-- this repo either. Reconstructed below, guarded, so a fresh rebuild works.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.proname = 'are_friends'
+  ) THEN
+    EXECUTE $fn$
+      CREATE FUNCTION public.are_friends(a UUID, b UUID)
+      RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $body$
+        SELECT EXISTS (
+          SELECT 1 FROM public.friendships f
+           WHERE f.status = 'accepted'
+             AND ((f.requester_id = a AND f.addressee_id = b)
+               OR (f.addressee_id = a AND f.requester_id = b))
+        );
+      $body$;
+    $fn$;
+  END IF;
+END $$;
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -93,18 +121,8 @@ BEGIN
     CREATE POLICY "shared_snaps_own" ON public.shared_snaps
       FOR ALL USING (auth.uid() = user_id);
 
-    -- Accepted friends may read. PulseScreen relies on this — it filters
-    -- nothing client-side. D1 in ROADMAP.md is an explicit task to TEST that
-    -- claim rather than assume it.
     CREATE POLICY "shared_snaps_friends_read" ON public.shared_snaps
-      FOR SELECT USING (
-        EXISTS (
-          SELECT 1 FROM public.friendships f
-          WHERE f.status = 'accepted'
-            AND ((f.requester_id = auth.uid() AND f.addressee_id = shared_snaps.user_id)
-              OR (f.addressee_id = auth.uid() AND f.requester_id = shared_snaps.user_id))
-        )
-      );
+      FOR SELECT USING (public.are_friends(auth.uid(), user_id));
   END IF;
 END $$;
 
@@ -116,9 +134,16 @@ BEGIN
     CREATE POLICY "leaves_own_write" ON public.leaves
       FOR ALL USING (auth.uid() = user_id);
 
-    CREATE POLICY "leaves_read_visible_snaps" ON public.leaves
+    -- Note how much tighter production is than the first reconstruction here:
+    -- the original guessed "any row whose snap exists", which would have let
+    -- any authenticated user read every leaf in the table.
+    CREATE POLICY "leaves_visible_read" ON public.leaves
       FOR SELECT USING (
-        EXISTS (SELECT 1 FROM public.shared_snaps s WHERE s.id = leaves.snap_id)
+        EXISTS (
+          SELECT 1 FROM public.shared_snaps ss
+           WHERE ss.id = leaves.snap_id
+             AND (ss.user_id = auth.uid() OR public.are_friends(auth.uid(), ss.user_id))
+        )
       );
   END IF;
 END $$;
@@ -138,9 +163,6 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'user_facts'
   ) THEN
-    -- Users can read and delete their own memory, which is what the Memory
-    -- screen needs. Writes come from edge functions using the service role,
-    -- which bypasses RLS.
     CREATE POLICY "user_facts_own" ON public.user_facts
       FOR ALL USING (auth.uid() = user_id);
   END IF;

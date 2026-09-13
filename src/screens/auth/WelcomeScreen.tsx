@@ -68,26 +68,28 @@ export default function WelcomeScreen({ navigation }: any) {
     setError('');
 
     try {
+      // Goes through validate_invite_code rather than reading the table.
+      // The old SELECT needed a policy that let anyone holding the anon key
+      // list every unused code in the pool. See migration 0006.
       const { data, error: fetchError } = await supabase
-        .from('invite_codes')
-        .select('id, code, status, uses')
-        .eq('code', trimmed)
-        .single();
+        .rpc('validate_invite_code', { p_code: trimmed });
 
-      if (fetchError || !data) {
+      const row = Array.isArray(data) ? data[0] : data;
+
+      if (fetchError || !row || row.state === 'not_found') {
         setError("That code doesn't exist. Check your invite and try again.");
         setLoading(false);
         return;
       }
 
-      if (data.status === 'used') {
+      if (row.state === 'used') {
         setError('This code has already been used. Each code is single-use.');
         setLoading(false);
         return;
       }
 
       // Valid — pass code forward to Phone screen
-      navigation.navigate('Phone', { inviteCode: trimmed, inviteCodeId: data.id });
+      navigation.navigate('Phone', { inviteCode: trimmed, inviteCodeId: row.code_id });
 
     } catch (e) {
       setError('Something went wrong. Please try again.');

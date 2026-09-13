@@ -99,12 +99,22 @@ SELECT c.relname AS table_name,
  ORDER BY rls_enabled, policies, table_name;
 
 -- ══════════════════════════════════════════════════════════════════════
--- STEP 1 — Audit the OBS-022 fallout (read-only, run this first)
+-- STEP 1 — Invite-code state (read-only)
 -- ══════════════════════════════════════════════════════════════════════
--- Invite codes were never actually being marked used: the client UPDATE
--- matched zero rows under the invite_codes_own RLS policy, and Postgres
--- reports no error for an update that matches nothing. Find out what the
--- table actually believes.
+-- CORRECTION to OBS-022. The original diagnosis was wrong. It assumed only
+-- invite_codes_own governed UPDATE, so a new user marking someone else's code
+-- as used would match zero rows. Production also carries:
+--
+--   "redeem code"  FOR UPDATE TO public USING (auth.uid() IS NOT NULL)
+--
+-- Permissive policies are OR-ed, so any authenticated user can update ANY row
+-- in invite_codes. Redemption was working. The RPC in 0002 is still the right
+-- shape - it is scoped, atomic and needs no blanket UPDATE grant - and it is
+-- what lets that policy be dropped in step 6.
+--
+-- Run this anyway: it is the baseline before the policy changes, and it shows
+-- whether any code has been used more than once, which the blanket UPDATE
+-- policy makes possible.
 
 SELECT
   COALESCE(status, 'unused')          AS status,
@@ -199,3 +209,50 @@ SELECT origin, COUNT(*), MAX(updated_at) AS newest
 -- Rollback for step 4, if you need it
 -- ══════════════════════════════════════════════════════════════════════
 -- SELECT cron.unschedule('observe-facts-nightly');
+
+-- ══════════════════════════════════════════════════════════════════════
+-- STEP 6 — Close the invite-code enumeration hole
+-- ══════════════════════════════════════════════════════════════════════
+-- DO NOT RUN THIS UNTIL A BUILD CONTAINING THE NEW WelcomeScreen IS LIVE.
+-- Dropping the SELECT policies breaks code validation for every invitee on
+-- the current build. Order: ship the build -> confirm signup works -> run this.
+--
+-- What these three policies currently allow:
+--
+--   invite_codes_public_read  SELECT TO public USING (true)
+--   "validate code"           SELECT TO public USING (true)
+--       Anyone holding the anon key - which ships inside the app bundle and
+--       sits in src/lib/supabase.ts - can list every unused code in the pool.
+--       The invite-only gate is bypassable by reading a table.
+--
+--   "redeem code"             UPDATE TO public USING (auth.uid() IS NOT NULL)
+--       Any authenticated user can update ANY invite row: flip a used code
+--       back to unused, reassign owner_id, rewrite the code itself.
+--
+-- validate_invite_code (0006) and redeem_invite_code (0002) both run
+-- SECURITY DEFINER and cover the two legitimate uses, so all three can go.
+-- PulseScreen still reads the user's own codes through invite_codes_own.
+
+-- DROP POLICY IF EXISTS invite_codes_public_read ON public.invite_codes;
+-- DROP POLICY IF EXISTS "validate code"          ON public.invite_codes;
+-- DROP POLICY IF EXISTS "redeem code"            ON public.invite_codes;
+
+-- Verify afterwards - signup on the new build, and:
+--   SELECT * FROM public.validate_invite_code('SOME-REAL-CODE');
+--   SELECT policyname, cmd FROM pg_policies
+--    WHERE schemaname='public' AND tablename='invite_codes';
+
+-- ══════════════════════════════════════════════════════════════════════
+-- STEP 7 — Two other open reads worth a decision (not urgent)
+-- ══════════════════════════════════════════════════════════════════════
+--   moment_likes  likes_all  FOR ALL USING (true)
+--       Any caller can insert or DELETE anyone's likes. Should be
+--       FOR ALL USING (auth.uid() = user_id) plus a read policy.
+--
+--   profiles      profiles_public_read  SELECT USING (true)
+--       Every profile - name, username, location - is readable by anyone with
+--       the anon key. Normal for a social app, worth being a decision rather
+--       than an accident. D3 in ROADMAP.md.
+--
+--   daily_summaries carries both daily_own and summaries_own, which are
+--   identical. Harmless duplicate, tidy up whenever.
