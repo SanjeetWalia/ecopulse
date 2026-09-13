@@ -63,51 +63,85 @@ CREATE INDEX IF NOT EXISTS user_facts_user_updated_idx
   ON public.user_facts (user_id, updated_at DESC);
 
 -- ─── RLS ───────────────────────────────────────────────────────────────────
+-- Enabling RLS is idempotent and always safe.
 ALTER TABLE public.shared_snaps      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leaves            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.eco_chat_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_facts        ENABLE ROW LEVEL SECURITY;
 
-DO $$ BEGIN
-  -- Own rows, always.
-  CREATE POLICY "shared_snaps_own" ON public.shared_snaps
-    FOR ALL USING (auth.uid() = user_id);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- Policies are a different matter. These four tables already exist in
+-- production with policies that were created in the dashboard and never
+-- committed, and their names are unknown to this file. Postgres OR-s
+-- permissive policies together, so blindly adding one to a table that is
+-- already protected can WIDEN access rather than restore it.
+--
+-- So: only define policies on a table that has none. A fresh rebuild from
+-- this migration gets the intended rules; the live project is left exactly
+-- as it is. Compare the two by hand with the query in
+-- supabase/run-once/2026-09-13-editor.sql before trusting either.
+--
+-- NOTE ON friendships: this originally guessed user_id / friend_id. The real
+-- columns are requester_id / addressee_id (supabase_schema.sql line 114).
+-- The push failed loudly on that, which is the argument for committing schema
+-- rather than reconstructing it (OBS-018).
 
-DO $$ BEGIN
-  -- Accepted friends may read. PulseScreen relies on this — it filters nothing
-  -- client-side. D1 in ROADMAP.md is an explicit task to TEST this claim.
-  CREATE POLICY "shared_snaps_friends_read" ON public.shared_snaps
-    FOR SELECT USING (
-      EXISTS (
-        SELECT 1 FROM public.friendships f
-        WHERE f.status = 'accepted'
-          AND ((f.user_id = auth.uid() AND f.friend_id = shared_snaps.user_id)
-            OR (f.friend_id = auth.uid() AND f.user_id = shared_snaps.user_id))
-      )
-    );
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'shared_snaps'
+  ) THEN
+    CREATE POLICY "shared_snaps_own" ON public.shared_snaps
+      FOR ALL USING (auth.uid() = user_id);
 
-DO $$ BEGIN
-  CREATE POLICY "leaves_own_write" ON public.leaves
-    FOR ALL USING (auth.uid() = user_id);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    -- Accepted friends may read. PulseScreen relies on this — it filters
+    -- nothing client-side. D1 in ROADMAP.md is an explicit task to TEST that
+    -- claim rather than assume it.
+    CREATE POLICY "shared_snaps_friends_read" ON public.shared_snaps
+      FOR SELECT USING (
+        EXISTS (
+          SELECT 1 FROM public.friendships f
+          WHERE f.status = 'accepted'
+            AND ((f.requester_id = auth.uid() AND f.addressee_id = shared_snaps.user_id)
+              OR (f.addressee_id = auth.uid() AND f.requester_id = shared_snaps.user_id))
+        )
+      );
+  END IF;
+END $$;
 
-DO $$ BEGIN
-  CREATE POLICY "leaves_read_visible_snaps" ON public.leaves
-    FOR SELECT USING (
-      EXISTS (SELECT 1 FROM public.shared_snaps s WHERE s.id = leaves.snap_id)
-    );
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'leaves'
+  ) THEN
+    CREATE POLICY "leaves_own_write" ON public.leaves
+      FOR ALL USING (auth.uid() = user_id);
 
-DO $$ BEGIN
-  CREATE POLICY "eco_chat_own" ON public.eco_chat_messages
-    FOR ALL USING (auth.uid() = user_id);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    CREATE POLICY "leaves_read_visible_snaps" ON public.leaves
+      FOR SELECT USING (
+        EXISTS (SELECT 1 FROM public.shared_snaps s WHERE s.id = leaves.snap_id)
+      );
+  END IF;
+END $$;
 
-DO $$ BEGIN
-  -- Users can read and delete their own memory. Writes come from edge
-  -- functions using the service role, which bypasses RLS.
-  CREATE POLICY "user_facts_own" ON public.user_facts
-    FOR ALL USING (auth.uid() = user_id);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'eco_chat_messages'
+  ) THEN
+    CREATE POLICY "eco_chat_own" ON public.eco_chat_messages
+      FOR ALL USING (auth.uid() = user_id);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'user_facts'
+  ) THEN
+    -- Users can read and delete their own memory, which is what the Memory
+    -- screen needs. Writes come from edge functions using the service role,
+    -- which bypasses RLS.
+    CREATE POLICY "user_facts_own" ON public.user_facts
+      FOR ALL USING (auth.uid() = user_id);
+  END IF;
+END $$;

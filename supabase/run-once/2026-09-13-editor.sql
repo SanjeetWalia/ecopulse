@@ -6,6 +6,36 @@
 -- `supabase db push` and are NOT repeated here.
 
 -- ══════════════════════════════════════════════════════════════════════
+-- STEP 0 — What RLS policies actually exist? (read-only)
+-- ══════════════════════════════════════════════════════════════════════
+-- The v3 tables were created in the dashboard, so their policies were never
+-- committed and this repo does not know their names. Migration 0001 therefore
+-- refuses to add policies to any table that already has some — Postgres OR-s
+-- permissive policies together, so adding one to an already-protected table
+-- widens access instead of restoring it.
+--
+-- Run this, then compare against the intended rules in 0001.
+
+SELECT tablename, policyname, cmd, permissive, roles, qual
+  FROM pg_policies
+ WHERE schemaname = 'public'
+   AND tablename IN ('shared_snaps', 'leaves', 'eco_chat_messages', 'user_facts', 'friendships', 'invite_codes')
+ ORDER BY tablename, policyname;
+
+-- Tables with RLS enabled but NO policy are readable by nobody and writable
+-- by nobody through the anon/authenticated keys. Tables with RLS DISABLED are
+-- wide open. Both are worth knowing about (D1 in ROADMAP.md).
+SELECT c.relname AS table_name,
+       c.relrowsecurity AS rls_enabled,
+       COUNT(p.policyname) AS policies
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  LEFT JOIN pg_policies p ON p.schemaname = n.nspname AND p.tablename = c.relname
+ WHERE n.nspname = 'public' AND c.relkind = 'r'
+ GROUP BY 1, 2
+ ORDER BY rls_enabled, policies, table_name;
+
+-- ══════════════════════════════════════════════════════════════════════
 -- STEP 1 — Audit the OBS-022 fallout (read-only, run this first)
 -- ══════════════════════════════════════════════════════════════════════
 -- Invite codes were never actually being marked used: the client UPDATE

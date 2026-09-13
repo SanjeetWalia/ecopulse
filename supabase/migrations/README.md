@@ -9,6 +9,14 @@ rebuild its own backend (OBS-018).
 
 These files close that gap.
 
+## 0001 has already been proven wrong once
+
+The first `supabase db push` failed on it: the policy predicate guessed
+`friendships(user_id, friend_id)` when the real columns are
+`requester_id, addressee_id`. Postgres rejected the whole migration, which is
+the good outcome — it was loud. Replace the reconstruction with a real dump
+before relying on it for anything.
+
 ## Important: 0001 is reconstructed, not dumped
 
 `0001_v3_baseline_reconstructed.sql` was written by reading application code, not
