@@ -6,6 +6,32 @@
 -- `supabase db push` and are NOT repeated here.
 
 -- ══════════════════════════════════════════════════════════════════════
+-- STEP 0a — Confirm the push actually landed (read-only)
+-- ══════════════════════════════════════════════════════════════════════
+-- Both RPCs present, and callable by authenticated users only.
+SELECT p.proname,
+       p.prosecdef            AS security_definer,
+       pg_get_function_identity_arguments(p.oid) AS args
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+ WHERE n.nspname = 'public'
+   AND p.proname IN ('redeem_invite_code', 'delete_account');
+
+-- 0003 is silent about whether it created delete_account or skipped an
+-- existing one. If it created ours, the body is the reconstruction below and
+-- is worth reading before anyone relies on it.
+SELECT pg_get_functiondef(p.oid)
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+ WHERE n.nspname = 'public' AND p.proname = 'delete_account';
+
+-- The Section N columns.
+SELECT column_name, data_type, column_default
+  FROM information_schema.columns
+ WHERE table_schema = 'public' AND table_name = 'user_facts'
+ ORDER BY ordinal_position;
+
+-- ══════════════════════════════════════════════════════════════════════
 -- STEP 0 — What RLS policies actually exist? (read-only)
 -- ══════════════════════════════════════════════════════════════════════
 -- The v3 tables were created in the dashboard, so their policies were never
