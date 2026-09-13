@@ -32,6 +32,43 @@ SELECT column_name, data_type, column_default
  ORDER BY ordinal_position;
 
 -- ══════════════════════════════════════════════════════════════════════
+-- STEP 0b — Generate the real DDL, without pg_dump (read-only)
+-- ══════════════════════════════════════════════════════════════════════
+-- `supabase db dump` needs Docker, and native pg_dump needs the database
+-- password. Neither is necessary to answer the only question that matters:
+-- what does production ACTUALLY say? These two queries print it as SQL you
+-- can paste straight into a migration.
+
+-- Every RLS policy in public, rendered as CREATE POLICY statements.
+-- Copy the output over the policy block in 0001 and the reconstruction stops
+-- being a guess.
+SELECT format(
+         'CREATE POLICY %I ON public.%I AS %s FOR %s TO %s%s%s;',
+         policyname,
+         tablename,
+         permissive,
+         cmd,
+         array_to_string(roles, ', '),
+         CASE WHEN qual       IS NOT NULL THEN E'\n  USING (' || qual || ')'      ELSE '' END,
+         CASE WHEN with_check IS NOT NULL THEN E'\n  WITH CHECK (' || with_check || ')' ELSE '' END
+       ) AS ddl
+  FROM pg_policies
+ WHERE schemaname = 'public'
+ ORDER BY tablename, policyname;
+
+-- Every column on the tables this repo reconstructed, as they really are.
+SELECT c.table_name,
+       c.column_name,
+       c.data_type,
+       c.is_nullable,
+       c.column_default
+  FROM information_schema.columns c
+ WHERE c.table_schema = 'public'
+   AND c.table_name IN ('shared_snaps', 'leaves', 'eco_chat_messages',
+                        'user_facts', 'invite_codes', 'friendships')
+ ORDER BY c.table_name, c.ordinal_position;
+
+-- ══════════════════════════════════════════════════════════════════════
 -- STEP 0 — What RLS policies actually exist? (read-only)
 -- ══════════════════════════════════════════════════════════════════════
 -- The v3 tables were created in the dashboard, so their policies were never
