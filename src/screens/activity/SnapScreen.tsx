@@ -25,6 +25,14 @@ import { Colors, Typography } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/authStore';
 import { invalidateMokoAviCache } from '../../lib/mokoAvi';
+import { SampleTag } from '../../components/kit';
+import { useGrowthStore } from '../../lib/growthStore';
+import {
+  SAMPLE_MODE, SAMPLE_MEAL, SAMPLE_MENU, SAMPLE_LABEL, SAMPLE_SHELF, SAMPLE_RECEIPT, SnapKind, KIND_LABEL,
+} from '../../lib/sample';
+import {
+  KindBanner, MealRead, MenuRead, LabelRead, ShelfRead, ReceiptRead, GenericRead, MealReadData, useMealPicks,
+} from '../snap/Reads';
 
 interface SnapResult {
   label: string;
@@ -36,6 +44,13 @@ interface SnapResult {
   confidence: 'high' | 'medium' | 'low';
   suggestions: string[];
   bill?: { kwh: number; period_days: number } | null;
+  // v5: analyze-snap returns what kind of snap this is, and for meals the
+  // items on the table. Older responses have neither, so both are optional.
+  kind?: SnapKind;
+  items?: MealReadData['items'];
+  good?: string | null;
+  few_know?: string | null;
+  catch?: string | null;
 }
 
 const CONTEXT_CHIPS = [
@@ -79,11 +94,58 @@ export default function SnapScreen({ navigation }: any) {
   const [contextDelta, setContextDelta] = useState(0);
   const [contextNotes, setContextNotes] = useState<string[]>([]);
 
+  // v5 reads
+  const [kind, setKind] = useState<SnapKind | null>(null);
+  const [preview, setPreview] = useState(false); // sample read, no photo
+  const [tipOn, setTipOn] = useState(false);
+  const [menuChosen, setMenuChosen] = useState<string | null>(null);
+  const [restaurant, setRestaurant] = useState(SAMPLE_MENU.restaurant);
+  const [labelFields, setLabelFields] = useState({ brand: SAMPLE_LABEL.brand, product: SAMPLE_LABEL.product, size: SAMPLE_LABEL.size });
+  const [bought, setBought] = useState<boolean | null>(null);
+  const [shelfPick, setShelfPick] = useState<'a' | 'b' | null>(null);
+  const [swapOn, setSwapOn] = useState(false);
+  const markDay = useGrowthStore((g) => g.markDay);
+  const addWatch = useGrowthStore((g) => g.addWatch);
+  const setPlanMove = useGrowthStore((g) => g.setPlanMove);
+
+  const mealData: MealReadData | null =
+    preview || !result
+      ? SAMPLE_MEAL
+      : {
+          title: result.label,
+          items: result.items?.length
+            ? result.items
+            : [{ id: 'main', name: result.label, lb: Math.max(0, result.co2_kg + contextDelta) * 2.20462, kcal: [0, 0], proteinG: 0 }],
+          good: result.good ?? null,
+          fewKnow: result.few_know ?? null,
+          catch: result.catch ?? null,
+          tip: null,
+        };
+  const meal = useMealPicks(kind === 'meal' ? mealData : null);
+
+  const resetReads = () => {
+    setKind(null); setPreview(false); setTipOn(false); setMenuChosen(null);
+    setBought(null); setShelfPick(null); setSwapOn(false); meal.reset();
+  };
+
+  const startPreview = (k: SnapKind) => {
+    resetAll();
+    setPreview(true);
+    setKind(k);
+  };
+
+  const changeKind = (k: SnapKind) => {
+    // Backend phase: re-run analyze-snap with the kind forced.
+    setKind(k);
+    if (!result) setPreview(true);
+  };
+
   const resetAll = () => {
     setImage(null); setImageBase64(null); setPhotoPath(null);
     setResult(null); setLoggedActivityId(null); setShared(false);
     setError(null); setShowCorrect(false); setCorrectionText('');
     setActiveChips([]); setContextDelta(0); setContextNotes([]);
+    resetReads();
   };
 
   useFocusEffect(useCallback(() => { resetAll(); }, []));
@@ -141,6 +203,8 @@ export default function SnapScreen({ navigation }: any) {
       if (!data?.result) throw new Error('No result returned');
 
       setResult(data.result);
+      setKind((data.result.kind as SnapKind) ?? (data.result.bill ? 'bill' : 'meal'));
+      setPreview(false);
       setActiveChips([]); setContextDelta(0); setContextNotes([]);
       setShowCorrect(false); setCorrectionText('');
     } catch {
@@ -203,6 +267,7 @@ export default function SnapScreen({ navigation }: any) {
     }
     setLoggedActivityId(data.id);
     invalidateMokoAviCache(profile.id);
+    markDay('snap');
   };
 
   // Bill spread: one row per billing day, each carrying its share.
@@ -278,6 +343,78 @@ export default function SnapScreen({ navigation }: any) {
   };
 
   const finalCo2 = result ? Math.max(0, result.co2_kg + contextDelta) : 0;
+
+  // One primary action per read. In a sample preview it only updates the
+  // phone (streak, watch list, plan); real snaps write to the ledger.
+  const finishLocal = (source: 'snap' | 'receipt' = 'snap') => {
+    setLoggedActivityId('local');
+    markDay(source);
+  };
+  const primary = ((): { label: string; doneLabel: string; onPress: () => void; disabled?: boolean } => {
+    switch (kind) {
+      case 'meal': {
+        const lbTotal = meal.total;
+        return {
+          label: `Add to my day · ${lbTotal.toFixed(1)} lb`,
+          doneLabel: 'Added to your day',
+          onPress: () => {
+            if (tipOn) setPlanMove('choose_draft', true);
+            if (preview || !result) finishLocal();
+            else logActivity();
+          },
+        };
+      }
+      case 'menu': {
+        const d = SAMPLE_MENU.dishes.find((x) => x.id === menuChosen);
+        return {
+          label: d ? `Add ${d.name} · ${d.lb.toFixed(1)} lb` : 'Pick a dish to add it',
+          doneLabel: 'Added to your day',
+          disabled: !d,
+          onPress: () => finishLocal(),
+        };
+      }
+      case 'label':
+        return {
+          label: 'Done',
+          doneLabel: bought ? 'Watching it for recalls' : 'Saved',
+          onPress: () => {
+            if (bought) addWatch({ name: `${labelFields.product}, ${labelFields.size}`, brand: labelFields.brand, addedFrom: 'label scan · today' });
+            finishLocal();
+          },
+        };
+      case 'shelf':
+        return { label: 'Save my pick', doneLabel: 'Pick saved', disabled: !shelfPick, onPress: () => finishLocal() };
+      case 'receipt':
+        return {
+          label: `Add basket to my week · ${SAMPLE_RECEIPT.lines.reduce((t, l) => t + l.lb, 0).toFixed(0)} lb`,
+          doneLabel: 'Basket added, products watched',
+          onPress: () => {
+            if (swapOn) setPlanMove('receipt_swap', true);
+            finishLocal('receipt');
+          },
+        };
+      case 'bill':
+        return isBill && !preview
+          ? { label: `Spread across ${result!.bill!.period_days} days`, doneLabel: 'Bill spread across your days', onPress: logBillSpread }
+          : { label: 'Spread across 31 days', doneLabel: 'Bill spread across your days', onPress: () => finishLocal() };
+      default:
+        return { label: kind === 'fuel' ? 'Add to my day' : 'Done', doneLabel: 'Saved', onPress: () => finishLocal() };
+    }
+  })();
+
+  const openTableCard = () => {
+    if (!mealData) return;
+    navigation.navigate('TableCard', {
+      title: mealData.title,
+      lb: meal.total,
+      items: mealData.items.map((it) => it.name),
+      good: mealData.good,
+      fewKnow: mealData.fewKnow,
+      catch: mealData.catch,
+      place: preview ? SAMPLE_MEAL.place : null,
+      photo: image,
+    });
+  };
   const impact = result ? getImpact(finalCo2) : null;
 
   return (
@@ -291,9 +428,9 @@ export default function SnapScreen({ navigation }: any) {
           </TouchableOpacity>
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={s.title}>Snap</Text>
-            <Text style={s.subtitle}>See the carbon story</Text>
+            <Text style={s.subtitle}>Point it at anything</Text>
           </View>
-          {image && (
+          {(image || preview) && (
             <TouchableOpacity style={s.resetBtn} onPress={resetAll}>
               <Text style={s.resetTxt}>New snap</Text>
             </TouchableOpacity>
@@ -302,7 +439,7 @@ export default function SnapScreen({ navigation }: any) {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
 
-          {!image && (
+          {!image && !preview && (
             <>
               <View style={s.captureRow}>
                 <TouchableOpacity style={s.captureBtn} onPress={() => pickImage('camera')} activeOpacity={0.85}>
@@ -316,7 +453,19 @@ export default function SnapScreen({ navigation }: any) {
                   <Text style={s.captureBtnSub}>Pick existing photo</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={s.emptyHint}>Point at your lunch, your ride, your receipt — or your electricity bill.</Text>
+              <Text style={s.emptyHint}>Point at a meal, a menu, a label, a receipt or a bill. Eco Pulse works out which.</Text>
+              {SAMPLE_MODE && (
+                <View style={s.previewBox}>
+                  <Text style={s.previewTitle}>Preview a read with sample data</Text>
+                  <View style={s.previewChips}>
+                    {(Object.keys(KIND_LABEL) as SnapKind[]).map((k) => (
+                      <TouchableOpacity key={k} style={s.previewChip} onPress={() => startPreview(k)} activeOpacity={0.8}>
+                        <Text style={s.previewChipTxt}>{k}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
               {error && <View style={s.errorBox}><Text style={s.errorTxt}>{error}</Text></View>}
             </>
           )}
@@ -333,143 +482,96 @@ export default function SnapScreen({ navigation }: any) {
             </View>
           )}
 
-          {result && !analyzing && impact && (
-            <View style={[s.resultCard, { backgroundColor: impact.bg, borderColor: impact.border }]}>
-              <View style={s.resultHeader}>
-                <Text style={s.resultLabel}>{result.label}</Text>
-                <View style={[s.confidenceBadge, { borderColor: impact.border }]}>
-                  <Text style={[s.confidenceTxt, { color: impact.color }]}>{result.confidence} confidence</Text>
-                </View>
-              </View>
+          {kind && (result || preview) && !analyzing && (
+            <View style={s.readWrap}>
+              {preview && <SampleTag />}
+              <KindBanner kind={kind} onChange={changeKind} />
 
-              <View style={s.co2Row}>
-                <Text style={[s.co2Number, { color: impact.color }]}>
-                  {finalCo2 === 0 ? '0' : finalCo2.toFixed(2)}
-                </Text>
-                <Text style={s.co2Unit}>kg CO₂e</Text>
-                <View style={[s.impactBadge, { backgroundColor: impact.bg, borderColor: impact.border }]}>
-                  <Text style={[s.impactLabel, { color: impact.color }]}>{impact.label}</Text>
-                </View>
-              </View>
-
-              {!!result.equivalent && (
-                <View style={s.equivRow}>
-                  <Text style={s.equivTxt}>{result.equivalent}</Text>
-                </View>
+              {kind === 'meal' && mealData && (
+                <MealRead data={mealData} picks={meal.picks} onPick={meal.setPick} tipOn={tipOn} onTip={setTipOn} />
               )}
-
-              {isBill && (
-                <View style={s.billRow}>
+              {kind === 'menu' && (
+                <MenuRead data={SAMPLE_MENU} chosen={menuChosen} onChoose={setMenuChosen} restaurant={restaurant} onRestaurant={setRestaurant} />
+              )}
+              {kind === 'label' && (
+                <LabelRead data={SAMPLE_LABEL} fields={labelFields} onField={(k, v) => setLabelFields((f) => ({ ...f, [k]: v }))} bought={bought} onBought={setBought} />
+              )}
+              {kind === 'shelf' && <ShelfRead data={SAMPLE_SHELF} pick={shelfPick} onPick={setShelfPick} />}
+              {kind === 'receipt' && <ReceiptRead data={SAMPLE_RECEIPT} swapOn={swapOn} onSwap={setSwapOn} />}
+              {kind === 'bill' && isBill && result && (
+                <View>
+                  <Text style={s.billTitle}>{result.label}</Text>
                   <Text style={s.billTxt}>
-                    📄 This bill covers {result!.bill!.period_days} days ({result!.bill!.kwh} kWh). Spread it so each day carries its share.
+                    This bill covers {result.bill!.period_days} days ({result.bill!.kwh} kWh), about{' '}
+                    {(finalCo2 * 2.20462).toFixed(0)} lb CO₂e. Spread it so each day carries its share.
                   </Text>
                 </View>
               )}
-
-              {contextDelta !== 0 && (
-                <View style={s.deltaRow}>
-                  <Text style={s.deltaBase}>Base: {result.co2_kg.toFixed(2)} kg</Text>
-                  <Text style={[s.deltaAmt, { color: contextDelta > 0 ? '#FB7185' : Colors.lime }]}>
-                    {contextDelta > 0 ? '+' : ''}{contextDelta.toFixed(2)} kg context
-                  </Text>
-                  <Text style={[s.deltaTotal, { color: impact.color }]}>= {finalCo2.toFixed(2)} kg</Text>
-                </View>
+              {(kind === 'fuel' || kind === 'fridge' || kind === 'tag' || kind === 'bin' || (kind === 'bill' && !isBill)) && (
+                <GenericRead kind={kind as 'bill' | 'fuel' | 'fridge' | 'tag' | 'bin'} />
               )}
 
-              <Text style={s.explanation}>{result.explanation}</Text>
-
-              {!isBill && (
-                <View style={s.contextSection}>
-                  <Text style={s.contextTitle}>Add context — how was this ordered?</Text>
-                  <View style={s.chipsWrap}>
-                    {CONTEXT_CHIPS.map(chip => {
-                      const active = activeChips.includes(chip.id);
-                      return (
-                        <TouchableOpacity
-                          key={chip.id}
-                          style={[s.chip, active && { backgroundColor: 'rgba(200,244,90,0.15)', borderColor: 'rgba(200,244,90,0.4)' }]}
-                          onPress={() => toggleChip(chip)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[s.chipTxt, active && { color: Colors.lime }]}>{chip.label}</Text>
-                          {active && <Text style={s.chipNote}>{chip.note}</Text>}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              {result.suggestions?.length > 0 && (
-                <View style={s.suggestionsBox}>
-                  <Text style={s.suggestionsTitle}>Greener alternatives</Text>
-                  {result.suggestions.map((sug, i) => (
-                    <View key={i} style={s.suggestionRow}>
-                      <Text style={s.suggestionDot}>🌿</Text>
-                      <Text style={s.suggestionText}>{sug}</Text>
+              {!preview && (
+                !showCorrect ? (
+                  <TouchableOpacity style={s.correctBtn} onPress={() => setShowCorrect(true)}>
+                    <Text style={s.correctBtnTxt}>Not quite right? Correct this</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={s.correctForm}>
+                    <Text style={s.correctFormLabel}>What is it actually?</Text>
+                    <TextInput
+                      style={s.correctInput}
+                      placeholder="e.g. chai latte with oat milk, large size"
+                      placeholderTextColor={Colors.tx3}
+                      value={correctionText}
+                      onChangeText={setCorrectionText}
+                      autoFocus
+                      returnKeyType="done"
+                      onSubmitEditing={submitCorrection}
+                    />
+                    <View style={s.correctActions}>
+                      <TouchableOpacity style={s.correctCancelBtn} onPress={() => { setShowCorrect(false); setCorrectionText(''); }}>
+                        <Text style={s.correctCancelTxt}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[s.correctSubmitBtn, !correctionText.trim() && { opacity: 0.4 }]}
+                        onPress={submitCorrection}
+                        disabled={!correctionText.trim() || correcting}
+                      >
+                        {correcting
+                          ? <ActivityIndicator color="#071810" size="small" />
+                          : <Text style={s.correctSubmitTxt}>Recalculate →</Text>}
+                      </TouchableOpacity>
                     </View>
-                  ))}
-                </View>
-              )}
-
-              {!showCorrect ? (
-                <TouchableOpacity style={s.correctBtn} onPress={() => setShowCorrect(true)}>
-                  <Text style={s.correctBtnTxt}>✏️ Not quite right? Correct this</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={s.correctForm}>
-                  <Text style={s.correctFormLabel}>What is it actually?</Text>
-                  <TextInput
-                    style={s.correctInput}
-                    placeholder="e.g. chai latte with oat milk, large size"
-                    placeholderTextColor={Colors.tx3}
-                    value={correctionText}
-                    onChangeText={setCorrectionText}
-                    autoFocus
-                    returnKeyType="done"
-                    onSubmitEditing={submitCorrection}
-                  />
-                  <View style={s.correctActions}>
-                    <TouchableOpacity style={s.correctCancelBtn} onPress={() => { setShowCorrect(false); setCorrectionText(''); }}>
-                      <Text style={s.correctCancelTxt}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[s.correctSubmitBtn, !correctionText.trim() && { opacity: 0.4 }]}
-                      onPress={submitCorrection}
-                      disabled={!correctionText.trim() || correcting}
-                    >
-                      {correcting
-                        ? <ActivityIndicator color="#071810" size="small" />
-                        : <Text style={s.correctSubmitTxt}>Recalculate →</Text>}
-                    </TouchableOpacity>
                   </View>
-                </View>
+                )
               )}
 
               {!loggedActivityId ? (
                 <TouchableOpacity
-                  style={s.logBtn}
-                  onPress={isBill ? logBillSpread : logActivity}
+                  style={[s.logBtn, primary.disabled && { opacity: 0.45 }]}
+                  onPress={primary.onPress}
                   activeOpacity={0.85}
-                  disabled={logging}
+                  disabled={logging || primary.disabled}
                 >
                   {logging
                     ? <ActivityIndicator color="#071810" />
-                    : <Text style={s.logBtnTxt}>
-                        {isBill
-                          ? `Spread across ${result!.bill!.period_days} days ✓`
-                          : `Add to my day · ${(finalCo2 * 2.20462).toFixed(1)} lb ✓`}
-                      </Text>}
+                    : <Text style={s.logBtnTxt}>{primary.label}</Text>}
                 </TouchableOpacity>
               ) : (
                 <View style={{ gap: 8 }}>
                   <View style={s.loggedBadge}>
-                    <Text style={s.loggedTxt}>{isBill ? '✓ Bill spread across your days' : '✓ Added to your day'}</Text>
+                    <Text style={s.loggedTxt}>{primary.doneLabel}</Text>
                     <TouchableOpacity onPress={resetAll}>
                       <Text style={s.snapAnotherTxt}>Snap another →</Text>
                     </TouchableOpacity>
                   </View>
-                  {!isBill && (
+                  {kind === 'meal' && (
+                    <TouchableOpacity style={s.cardBtn} onPress={openTableCard} activeOpacity={0.85}>
+                      <Text style={s.cardBtnTxt}>Share as a card</Text>
+                    </TouchableOpacity>
+                  )}
+                  {kind === 'meal' && !preview && (
                     <TouchableOpacity
                       style={[s.circleBtn, shared && { opacity: 0.55 }]}
                       onPress={shareToCircle}
@@ -478,12 +580,9 @@ export default function SnapScreen({ navigation }: any) {
                     >
                       {sharing
                         ? <ActivityIndicator color={Colors.lime} size="small" />
-                        : <Text style={s.circleBtnTxt}>{shared ? '🌿 Shared with your circle' : 'Share to circle 🌿'}</Text>}
+                        : <Text style={s.circleBtnTxt}>{shared ? 'Shared with your circle' : 'Share to your circle'}</Text>}
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity onPress={shareOutside} style={{ alignItems: 'center', paddingVertical: 6 }}>
-                    <Text style={s.outsideTxt}>share outside ↗</Text>
-                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -563,6 +662,15 @@ const s = StyleSheet.create({
   correctCancelTxt: { fontFamily: Typography.headingBold, fontSize: 11, color: Colors.tx3 },
   correctSubmitBtn: { flex: 2, paddingVertical: 9, borderRadius: 10, backgroundColor: Colors.lime, alignItems: 'center' },
   correctSubmitTxt: { fontFamily: Typography.headingBold, fontSize: 11, color: '#071810' },
+  readWrap: { marginTop: 4 },
+  billTitle: { fontFamily: Typography.heading, fontSize: 20, fontWeight: '700', color: Colors.tx, marginTop: 14 },
+  cardBtn: { backgroundColor: Colors.sf, borderWidth: 1, borderColor: Colors.border2, borderRadius: 14, paddingVertical: 13, alignItems: 'center' },
+  cardBtnTxt: { fontFamily: Typography.headingBold, fontSize: 14, fontWeight: '700', color: Colors.lime },
+  previewBox: { marginTop: 22, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(252,211,77,0.4)', borderRadius: 14, padding: 12, gap: 10 },
+  previewTitle: { fontFamily: Typography.headingBold, fontSize: 11, fontWeight: '700', color: Colors.amber, letterSpacing: 0.8 },
+  previewChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  previewChip: { borderWidth: 1, borderColor: Colors.border2, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  previewChipTxt: { fontFamily: Typography.body, fontSize: 12.5, color: Colors.tx2, textTransform: 'capitalize' },
   logBtn: { backgroundColor: Colors.lime, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   logBtnTxt: { fontFamily: Typography.headingBold, fontSize: 14, color: '#071810' },
   loggedBadge: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(200,244,90,0.08)', borderRadius: 12, padding: 12 },

@@ -26,6 +26,7 @@ import PaywallScreen from '../screens/paywall/PaywallScreen';
 import StreakScreen from '../screens/streak/StreakScreen';
 import ChainScreen from '../screens/chain/ChainScreen';
 import HeadsUpScreen from '../screens/headsup/HeadsUpScreen';
+import TableCardScreen from '../screens/snap/TableCardScreen';
 import { useGrowthStore } from '../lib/growthStore';
 
 // Section M (September 2026): 3 tabs + raised center camera.
@@ -116,6 +117,7 @@ function MainNav() {
       <M.Screen name="Streak" component={StreakScreen} />
       <M.Screen name="Chain" component={ChainScreen} />
       <M.Screen name="HeadsUp" component={HeadsUpScreen} />
+      <M.Screen name="TableCard" component={TableCardScreen} options={{ presentation: 'modal' }} />
     </M.Navigator>
   );
 }

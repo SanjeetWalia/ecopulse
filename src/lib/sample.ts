@@ -211,7 +211,11 @@ export const SAMPLE_MEAL = {
   source: 'Beer packaging life-cycle study, Science of the Total Environment, 2024',
 };
 
-export const SAMPLE_MENU = {
+export const SAMPLE_MENU: {
+  restaurant: string;
+  dishes: { id: string; name: string; lb: number; kcal: [number, number]; price?: number; lighter?: boolean }[];
+  usualLb: number;
+} = {
   restaurant: 'Sample Kitchen, Frisco',
   dishes: [
     { id: 'd1', name: 'Grilled chicken bowl', lb: 3.1, kcal: [620, 740], price: 16 },
