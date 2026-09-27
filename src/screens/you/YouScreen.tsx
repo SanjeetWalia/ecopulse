@@ -2,7 +2,7 @@
 //
 // Profile + membership + account. Replaces ProfileScreen as the You tab
 // (ProfileScreen is preserved, unrouted).
-//   • Eco (free) / Eco Pulse (paid) membership display — no payment flow yet
+//   • Membership: one plan, $10 a month after a 7-day trial (v5)
 //   • Sign out
 //   • Delete account (Apple requirement) — calls the delete_account RPC;
 //     run supabase/delete_account.sql once to create it.
@@ -22,6 +22,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Typography } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/authStore';
+import { useGrowthStore, streakInfo, trialDaysLeft } from '../../lib/growthStore';
+import { priceLabel } from '../../lib/pricing';
+import { SAMPLE_MODE } from '../../lib/sample';
 
 // Every input the number can have, and whether it is actually feeding it.
 // Nothing here claims a date it cannot keep.
@@ -38,6 +41,13 @@ export default function YouScreen({ navigation }: any) {
   const { profile } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [deleting, setDeleting] = useState(false);
+  const entitlement = useGrowthStore((g) => g.entitlement);
+  const trialStartedAt = useGrowthStore((g) => g.trialStartedAt);
+  const days = useGrowthStore((g) => g.days);
+  const watchCount = useGrowthStore((g) => g.watchList.length);
+  const resetGrowth = useGrowthStore((g) => g.resetGrowth);
+  const streak = streakInfo(days);
+  const trialLeft = trialDaysLeft(trialStartedAt);
 
   const initials =
     profile?.full_name
@@ -113,31 +123,47 @@ export default function YouScreen({ navigation }: any) {
           {!!profile?.username && <Text style={s.username}>@{profile.username}</Text>}
         </View>
 
-        {/* Membership */}
+        {/* Membership (v5): one plan, $10 a month after a 7-day trial. */}
         <Text style={s.sect}>MEMBERSHIP</Text>
         <View style={s.planCard}>
           <View style={s.planRow}>
-            <Text style={s.planName}>Eco</Text>
+            <Text style={s.planName}>Eco Pulse</Text>
             <View style={s.planBadge}>
-              <Text style={s.planBadgeTxt}>YOUR PLAN</Text>
+              <Text style={s.planBadgeTxt}>{entitlement === 'trial' ? 'TRIAL' : 'MEMBER'}</Text>
             </View>
           </View>
-          <Text style={s.planDesc}>Snap, your daily number, your circle. The heartbeat.</Text>
-        </View>
-        <TouchableOpacity
-          style={s.upsell}
-          activeOpacity={0.85}
-          onPress={() =>
-            Alert.alert('Eco Pulse', 'The full breath — Optimizer, every passive source, unlimited chat memory. Arriving soon.')
-          }
-        >
-          <View style={s.planRow}>
-            <Text style={s.upsellName}>Eco Pulse</Text>
-            <Text style={s.upsellPrice}>$3.99/mo · $29/yr</Text>
-          </View>
           <Text style={s.planDesc}>
-            The full breath — Optimizer, every passive source, unlimited chat memory, weekly journals.
+            {entitlement === 'trial'
+              ? `${trialLeft} ${trialLeft === 1 ? 'day' : 'days'} left in your free trial, then ${priceLabel} a month. Cancel anytime in Settings.`
+              : `${priceLabel} a month. Manage or cancel in Settings.`}
           </Text>
+        </View>
+
+        {/* v5: the loop's own screens. */}
+        <Text style={s.sect}>YOUR LOOP</Text>
+        <TouchableOpacity style={s.setRow} onPress={() => navigation.navigate('Streak')} activeOpacity={0.7}>
+          <Text style={s.setIcon}>🔥</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.setL1}>Streak</Text>
+            <Text style={s.setL2}>{streak.count} days · what keeps a day, and repairs</Text>
+          </View>
+          <Text style={s.chev}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.setRow} onPress={() => navigation.navigate('Chain')} activeOpacity={0.7}>
+          <Text style={s.setIcon}>🔗</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.setL1}>Your chain</Text>
+            <Text style={s.setL2}>Keys you’ve earned, and who joined through you</Text>
+          </View>
+          <Text style={s.chev}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.setRow} onPress={() => navigation.navigate('HeadsUp')} activeOpacity={0.7}>
+          <Text style={s.setIcon}>🛡️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.setL1}>Heads up</Text>
+            <Text style={s.setL2}>Recalls checked against {watchCount} {watchCount === 1 ? 'product' : 'products'} you bought</Text>
+          </View>
+          <Text style={s.chev}>›</Text>
         </TouchableOpacity>
 
         {/* Memory (N4) — visible and editable, because a memory layer the
@@ -193,6 +219,25 @@ export default function YouScreen({ navigation }: any) {
           </View>
           {deleting && <ActivityIndicator size="small" color={Colors.coral} />}
         </TouchableOpacity>
+
+        {SAMPLE_MODE && (
+          <TouchableOpacity
+            style={s.setRow}
+            onPress={() =>
+              Alert.alert('Replay onboarding?', 'Clears the quiz, plan, trial, streak and check-ins on this phone so you can walk the new flow again.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Replay', onPress: resetGrowth },
+              ])
+            }
+            activeOpacity={0.7}
+          >
+            <Text style={s.setIcon}>🧪</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.setL1}>Replay onboarding</Text>
+              <Text style={s.setL2}>Testing only. Sample data is on.</Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
         <Text style={s.footer}>ecopulse · tryecopulse.com</Text>
       </ScrollView>

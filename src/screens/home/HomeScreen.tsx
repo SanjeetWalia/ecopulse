@@ -42,6 +42,8 @@ import {
   lb,
   KG_TO_LB,
 } from '../../lib/scope';
+import StreakCard from '../../components/StreakCard';
+import HeadsUpBanner from '../../components/HeadsUpBanner';
 
 const CATEGORY_META: Record<string, { label: string; icon: string; color: string }> = {
   transport: { label: 'Getting around', icon: '🚗', color: Colors.amber },
@@ -299,6 +301,13 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={s.mokoArrow}>→</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Heads up: only items that touch something this person bought or
+            scanned reach Today. Everything else waits in the weekly digest. */}
+        <HeadsUpBanner navigation={navigation} />
+
+        {/* Streak and today's check-ins (v5). */}
+        <StreakCard navigation={navigation} />
 
         {/* The flow */}
         <View style={s.flowHead}>

@@ -77,7 +77,7 @@ function colorFor(userId: string) {
   return FRIEND_COLORS[h % FRIEND_COLORS.length];
 }
 
-export default function PulseScreen() {
+export default function PulseScreen({ navigation }: any) {
   const { profile } = useAuthStore();
   const insets = useSafeAreaInsets();
 
@@ -256,15 +256,6 @@ export default function PulseScreen() {
     }
   };
 
-  const sendInvite = async () => {
-    if (!unspentCode) return;
-    try {
-      await Share.share({
-        message: `You're invited to Eco Pulse 🌿 — my EcoKey is ${unspentCode}. It works once. tryecopulse.com`,
-      });
-    } catch {}
-  };
-
   const maxBar = Math.max(...spark, 1);
   const periodLabel = period === 'week' ? 'this week' : period === 'month' ? 'this month' : 'this year';
 
@@ -336,7 +327,7 @@ export default function PulseScreen() {
           <View style={s.emptyCircle}>
             <Text style={{ fontSize: 30 }}>🫧</Text>
             <Text style={s.emptyCircleTxt}>
-              Your circle is quiet. Share a snap from the camera, or hand someone an EcoKey below.
+              Your circle is quiet. Share a snap from the camera, or pass on a key from your chain below.
             </Text>
           </View>
         ) : (
@@ -382,22 +373,18 @@ export default function PulseScreen() {
           })
         )}
 
-        {/* EcoKey invite */}
-        <View style={s.keyCard}>
-          <Text style={{ fontSize: 17 }}>🔑</Text>
+        {/* The chain (v5): keys are earned by kept pacts and passed on from
+            the chain screen, which replaces the old raw-code invite card. */}
+        <TouchableOpacity style={s.keyCard} onPress={() => navigation.navigate('Chain')} activeOpacity={0.85}>
+          <Text style={{ fontSize: 17 }}>🔗</Text>
           <View style={{ flex: 1 }}>
             <Text style={s.keyTxt}>
-              {unspentCount > 0
-                ? <>You hold <Text style={{ color: Colors.lime, fontFamily: Typography.headingBold }}>{unspentCount} EcoKey{unspentCount === 1 ? '' : 's'}</Text>. Every invite is intentional.</>
-                : 'All your EcoKeys are spent — your circle is growing.'}
+              <Text style={{ color: Colors.lime, fontFamily: Typography.headingBold }}>Your chain</Text>
+              {unspentCount > 0 ? ` · ${unspentCount} key${unspentCount === 1 ? '' : 's'} to pass on` : ' · see who’s with you'}
             </Text>
           </View>
-          {unspentCount > 0 && (
-            <TouchableOpacity style={s.keyBtn} onPress={sendInvite} activeOpacity={0.85}>
-              <Text style={s.keyBtnTxt}>Invite</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+          <Text style={{ fontSize: 20, color: Colors.tx3 }}>›</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );

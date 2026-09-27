@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -20,6 +20,13 @@ import ActivityDetailScreen from '../screens/activity/ActivityDetailScreen';
 import LogActivityScreen from '../screens/activity/LogActivityScreen';
 import EcoChatScreen from '../screens/air/EcoChatScreen';
 import MemoryScreen from '../screens/you/MemoryScreen';
+import OnboardingQuizScreen from '../screens/onboarding/OnboardingQuizScreen';
+import StartingPlanScreen from '../screens/onboarding/StartingPlanScreen';
+import PaywallScreen from '../screens/paywall/PaywallScreen';
+import StreakScreen from '../screens/streak/StreakScreen';
+import ChainScreen from '../screens/chain/ChainScreen';
+import HeadsUpScreen from '../screens/headsup/HeadsUpScreen';
+import { useGrowthStore } from '../lib/growthStore';
 
 // Section M (September 2026): 3 tabs + raised center camera.
 //
@@ -41,6 +48,7 @@ import MemoryScreen from '../screens/you/MemoryScreen';
 // Settings) are UNROUTED, not deleted. Code preserved in src/screens.
 
 const A = createNativeStackNavigator();
+const G = createNativeStackNavigator();
 const M = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -105,6 +113,9 @@ function MainNav() {
       <M.Screen name="LogActivity" component={LogActivityScreen} options={{ presentation: 'modal' }} />
       <M.Screen name="EcoChat" component={EcoChatScreen} options={{ presentation: 'modal' }} />
       <M.Screen name="Memory" component={MemoryScreen} />
+      <M.Screen name="Streak" component={StreakScreen} />
+      <M.Screen name="Chain" component={ChainScreen} />
+      <M.Screen name="HeadsUp" component={HeadsUpScreen} />
     </M.Navigator>
   );
 }
@@ -123,12 +134,44 @@ function AuthNav() {
   );
 }
 
+// v5 gate (September 2026): after sign-up, six questions and a starting plan,
+// then the hard paywall (7 days free, then $10 a month). Nobody reaches the
+// tabs without a trial or a subscription. The gate re-opens on the paywall,
+// not the quiz, for someone who onboarded but whose trial lapsed.
+function GateNav({ onboarded }: { onboarded: boolean }) {
+  return (
+    <G.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName={onboarded ? 'Paywall' : 'OnboardingQuiz'}
+    >
+      <G.Screen name="OnboardingQuiz" component={OnboardingQuizScreen} />
+      <G.Screen name="StartingPlan" component={StartingPlanScreen} />
+      <G.Screen name="Paywall" component={PaywallScreen} />
+    </G.Navigator>
+  );
+}
+
+function useGrowthHydrated() {
+  const [ready, setReady] = useState(useGrowthStore.persist.hasHydrated());
+  useEffect(() => {
+    const unsub = useGrowthStore.persist.onFinishHydration(() => setReady(true));
+    setReady(useGrowthStore.persist.hasHydrated());
+    return unsub;
+  }, []);
+  return ready;
+}
+
 export default function RootNavigator() {
   const { session, initialized } = useAuthStore();
-  if (!initialized) return null;
+  const growthReady = useGrowthHydrated();
+  const onboardedAt = useGrowthStore((s) => s.onboardedAt);
+  const entitlement = useGrowthStore((s) => s.entitlement);
+  if (!initialized || !growthReady) return null;
+
+  const entitled = entitlement === 'trial' || entitlement === 'active';
   return (
     <NavigationContainer>
-      {session ? <MainNav /> : <AuthNav />}
+      {!session ? <AuthNav /> : entitled ? <MainNav /> : <GateNav onboarded={!!onboardedAt} />}
     </NavigationContainer>
   );
 }
