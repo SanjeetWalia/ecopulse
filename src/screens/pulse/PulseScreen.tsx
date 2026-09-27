@@ -25,6 +25,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Colors, Typography } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/authStore';
+import PulseTimeline from '../../components/PulseTimeline';
+import { SampleTag } from '../../components/kit';
+import { getTimeline, Timeline } from '../../lib/growth';
+import { SAMPLE_MODE } from '../../lib/sample';
 
 const BASELINE_KG_PER_DAY = 28.6;
 const KG_TO_LB = 2.20462;
@@ -89,6 +93,7 @@ export default function PulseScreen({ navigation }: any) {
   const [unspentCode, setUnspentCode] = useState<string | null>(null);
   const [unspentCount, setUnspentCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [timeline, setTimeline] = useState<Timeline | null>(null);
 
   const loadNumbers = useCallback(async (p: Period) => {
     if (!profile?.id) return;
@@ -217,6 +222,7 @@ export default function PulseScreen({ navigation }: any) {
       loadNumbers(period);
       loadFeed();
       loadKeys();
+      getTimeline().then(setTimeline).catch(() => setTimeline(null));
     }, [loadNumbers, loadFeed, loadKeys, period])
   );
 
@@ -316,6 +322,14 @@ export default function PulseScreen({ navigation }: any) {
           </View>
           <Text style={s.sparkLbl}>last 7 days</Text>
         </View>
+
+        {/* Past → present → future (v5): air and money on one timeline. */}
+        {timeline && (
+          <View>
+            <PulseTimeline air={timeline.air} money={timeline.money} weeksFuture={timeline.weeksFuture} />
+            {SAMPLE_MODE && <View style={{ marginTop: 6 }}><SampleTag /></View>}
+          </View>
+        )}
 
         {/* Circle */}
         <View style={s.circleHead}>
