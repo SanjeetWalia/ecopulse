@@ -340,7 +340,7 @@ export function ShelfRead({ data, pick, onPick }: { data: ShelfReadData; pick: '
       <TouchableOpacity key={k} onPress={() => onPick(k)} activeOpacity={0.85} style={[st.shelfCol, pick === k && st.dishOn]}>
         {lighter === k && <Text style={st.lighter}>gives back more</Text>}
         <Text style={[st.itemName, { marginTop: 4 }]}>{p.name}</Text>
-        <Text style={[st.big, { fontSize: 30 }]}>{p.lb.toFixed(1)}</Text>
+        <Text style={[st.big, { fontSize: 30 }, lighter !== k && { color: Colors.tx2 }]}>{p.lb.toFixed(1)}</Text>
         <Text style={st.bigUnit}>lb CO₂e</Text>
         <Text style={st.dishMeta}>${p.usdPerUnit.toFixed(2)} per {p.unit}</Text>
         <Text style={st.dishMeta}>

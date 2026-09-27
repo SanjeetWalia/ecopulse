@@ -559,7 +559,7 @@ export default function SnapScreen({ navigation }: any) {
                     : <Text style={s.logBtnTxt}>{primary.label}</Text>}
                 </TouchableOpacity>
               ) : (
-                <View style={{ gap: 8 }}>
+                <View style={{ gap: 8, marginTop: 18 }}>
                   <View style={s.loggedBadge}>
                     <Text style={s.loggedTxt}>{primary.doneLabel}</Text>
                     <TouchableOpacity onPress={resetAll}>
@@ -671,7 +671,7 @@ const s = StyleSheet.create({
   previewChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   previewChip: { borderWidth: 1, borderColor: Colors.border2, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   previewChipTxt: { fontFamily: Typography.body, fontSize: 12.5, color: Colors.tx2, textTransform: 'capitalize' },
-  logBtn: { backgroundColor: Colors.lime, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  logBtn: { backgroundColor: Colors.lime, borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 18 },
   logBtnTxt: { fontFamily: Typography.headingBold, fontSize: 14, color: '#071810' },
   loggedBadge: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(200,244,90,0.08)', borderRadius: 12, padding: 12 },
   loggedTxt: { fontFamily: Typography.headingBold, fontSize: 12, color: Colors.lime },
