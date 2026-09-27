@@ -135,17 +135,22 @@ export default function PulseTimeline({
   weeksFuture,
 }: {
   air: Series;
-  money: Series;
+  money?: Series | null;
   weeksFuture: number;
 }) {
+  const showMoney = !!money && money.past.length > 1;
   const { width } = useWindowDimensions();
   const w = Math.min(width - 36, 420);
   return (
     <View style={st.wrap}>
       <Text style={st.title}>PAST · TODAY · AHEAD</Text>
-      <Chart s={air} color={Colors.lime} label="Air given back" weeksFuture={weeksFuture} width={w - 28} showAxis={false} />
-      <View style={{ height: 10 }} />
-      <Chart s={money} color={Colors.sky} label="Money saved" weeksFuture={weeksFuture} width={w - 28} showAxis />
+      <Chart s={air} color={Colors.lime} label="Air given back" weeksFuture={weeksFuture} width={w - 28} showAxis={!showMoney} />
+      {showMoney && (
+        <>
+          <View style={{ height: 10 }} />
+          <Chart s={money!} color={Colors.sky} label="Money saved" weeksFuture={weeksFuture} width={w - 28} showAxis />
+        </>
+      )}
       <Text style={st.note}>
         Solid is what happened. Dashed is where you’re heading, as you are and with your plan. A tip only moves the line it
         can prove.

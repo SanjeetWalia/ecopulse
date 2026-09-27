@@ -28,6 +28,8 @@ import ChainScreen from '../screens/chain/ChainScreen';
 import HeadsUpScreen from '../screens/headsup/HeadsUpScreen';
 import TableCardScreen from '../screens/snap/TableCardScreen';
 import { useGrowthStore } from '../lib/growthStore';
+import { configurePurchases } from '../lib/purchases';
+import { SAMPLE_MODE } from '../lib/sample';
 
 // Section M (September 2026): 3 tabs + raised center camera.
 //
@@ -168,7 +170,24 @@ export default function RootNavigator() {
   const growthReady = useGrowthHydrated();
   const onboardedAt = useGrowthStore((s) => s.onboardedAt);
   const entitlement = useGrowthStore((s) => s.entitlement);
+  const hydratedFromServer = useGrowthStore((s) => s.hydratedFromServer);
+  const hydrate = useGrowthStore((s) => s.hydrate);
+  const userId = session?.user?.id ?? null;
+  const [pulled, setPulled] = useState(false);
+
+  // On sign-in: pull onboarding, entitlement, streak and watch list from the
+  // server, and tie the store account to this user.
+  useEffect(() => {
+    if (!userId || !growthReady) return;
+    setPulled(false);
+    configurePurchases(userId).catch(() => {});
+    hydrate(userId).finally(() => setPulled(true));
+  }, [userId, growthReady, hydrate]);
+
   if (!initialized || !growthReady) return null;
+  // With a real backend, wait for the server's answer before choosing between
+  // the paywall and the app, so a paying member never sees a paywall flash.
+  if (session && !SAMPLE_MODE && !pulled && !hydratedFromServer) return null;
 
   const entitled = entitlement === 'trial' || entitlement === 'active';
   return (

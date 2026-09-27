@@ -29,6 +29,8 @@ import PulseTimeline from '../../components/PulseTimeline';
 import { SampleTag } from '../../components/kit';
 import { getTimeline, Timeline } from '../../lib/growth';
 import { SAMPLE_MODE } from '../../lib/sample';
+import { useGrowthStore } from '../../lib/growthStore';
+import { buildPlan } from '../../lib/plan';
 
 const BASELINE_KG_PER_DAY = 28.6;
 const KG_TO_LB = 2.20462;
@@ -94,6 +96,9 @@ export default function PulseScreen({ navigation }: any) {
   const [unspentCount, setUnspentCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const answers = useGrowthStore((g) => g.answers);
+  const planMoves = useGrowthStore((g) => g.planMoves);
+  const planLb = buildPlan(answers).moves.filter((m) => planMoves[m.id]).reduce((t, m) => t + m.lbPerWeek, 0);
 
   const loadNumbers = useCallback(async (p: Period) => {
     if (!profile?.id) return;
@@ -222,8 +227,8 @@ export default function PulseScreen({ navigation }: any) {
       loadNumbers(period);
       loadFeed();
       loadKeys();
-      getTimeline().then(setTimeline).catch(() => setTimeline(null));
-    }, [loadNumbers, loadFeed, loadKeys, period])
+      getTimeline(planLb).then(setTimeline).catch(() => setTimeline(null));
+    }, [loadNumbers, loadFeed, loadKeys, period, planLb])
   );
 
   const changePeriod = (p: Period) => {
@@ -324,7 +329,7 @@ export default function PulseScreen({ navigation }: any) {
         </View>
 
         {/* Past → present → future (v5): air and money on one timeline. */}
-        {timeline && (
+        {timeline && timeline.air.past.some((v) => v > 0) && (
           <View>
             <PulseTimeline air={timeline.air} money={timeline.money} weeksFuture={timeline.weeksFuture} />
             {SAMPLE_MODE && <View style={{ marginTop: 6 }}><SampleTag /></View>}

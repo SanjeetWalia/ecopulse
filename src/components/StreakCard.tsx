@@ -12,6 +12,9 @@ import { Chip } from './kit';
 import { useGrowthStore, streakInfo, isoDay } from '../lib/growthStore';
 import { openCheckIns } from '../lib/checkins';
 import { repairLabel } from '../lib/pricing';
+import { SAMPLE_MODE } from '../lib/sample';
+import { spendRepair } from '../lib/sync';
+import { buyRepair } from '../lib/purchases';
 
 function answeredThisPeriod(checkIns: Record<string, Record<string, string>>) {
   return (id: string, cadence: 'daily' | 'weekly' | 'monthly') => {
@@ -40,20 +43,35 @@ export default function StreakCard({ navigation }: { navigation: any }) {
   const info = streakInfo(days);
   const open = openCheckIns(answers, checkIns[isoDay()], answeredThisPeriod(checkIns));
 
-  const repair = () => {
+  const done = () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+  const repair = async () => {
     if (freeRepairs > 0) {
+      if (!SAMPLE_MODE && (await spendRepair()) !== 'repaired') return;
       repairYesterday(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      done();
       return;
     }
-    // Backend phase: StoreKit consumable purchase, then repair on success.
     Alert.alert('Repair yesterday', `Keep your ${info.count}-day streak for ${repairLabel}?`, [
       { text: 'Not now', style: 'cancel' },
       {
         text: `Repair · ${repairLabel}`,
-        onPress: () => {
+        onPress: async () => {
+          if (!SAMPLE_MODE) {
+            if (!(await buyRepair())) return;
+            // The webhook credits the purchase; give it a moment, then spend it.
+            let result = await spendRepair();
+            for (let i = 0; i < 3 && result === 'no_credit'; i++) {
+              await new Promise((r) => setTimeout(r, 1500));
+              result = await spendRepair();
+            }
+            if (result !== 'repaired') {
+              Alert.alert('Repair pending', 'Your purchase went through. The repair will show up in a minute.');
+              return;
+            }
+          }
           repairYesterday(true);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          done();
         },
       },
     ]);

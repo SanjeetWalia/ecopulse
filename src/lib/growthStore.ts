@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OnboardingAnswers, buildPlan } from './plan';
 import { TRIAL_DAYS } from './pricing';
 import { SAMPLE_MODE, SAMPLE_WATCH_LIST } from './sample';
+import { push, pull } from './sync';
 
 export type DaySource = 'snap' | 'checkin' | 'health' | 'receipt' | 'repair';
 export type EntitlementStatus = 'none' | 'trial' | 'active' | 'expired';
@@ -40,6 +41,9 @@ export function daysAgo(n: number, from: Date = new Date()): string {
 }
 
 interface GrowthState {
+  userId: string | null;
+  hydratedFromServer: boolean;
+
   // onboarding
   answers: OnboardingAnswers;
   onboardedAt: string | null;
@@ -71,6 +75,8 @@ interface GrowthState {
   removeWatch: (id: string) => void;
   markHeadsUpSeen: (id: string) => void;
   resetGrowth: () => void; // for testing the flow again
+  hydrate: (userId: string) => Promise<void>;
+  setEntitlement: (status: EntitlementStatus, trialStartedAt?: string | null) => void;
 }
 
 function seedDays(): Record<string, DaySource> {
@@ -84,6 +90,8 @@ function seedDays(): Record<string, DaySource> {
 }
 
 const initial = () => ({
+  userId: null as string | null,
+  hydratedFromServer: false,
   answers: {} as OnboardingAnswers,
   onboardedAt: null as string | null,
   planMoves: {} as Record<string, boolean>,
@@ -110,21 +118,26 @@ export const useGrowthStore = create<GrowthState>()(
         const moves: Record<string, boolean> = {};
         plan.moves.forEach((m) => (moves[m.id] = m.defaultOn));
         set({ onboardedAt: new Date().toISOString(), planMoves: moves });
+        if (!SAMPLE_MODE) push.onboarding(get().answers);
       },
 
       setPlanMove: (id, on) => set((s) => ({ planMoves: { ...s.planMoves, [id]: on } })),
 
       startTrial: () => set({ entitlement: 'trial', trialStartedAt: new Date().toISOString() }),
 
-      markDay: (source, day = isoDay()) =>
-        set((s) => (s.days[day] ? s : { days: { ...s.days, [day]: source } })),
+      markDay: (source, day = isoDay()) => {
+        set((s) => (s.days[day] ? s : { days: { ...s.days, [day]: source } }));
+        if (!SAMPLE_MODE && source !== 'repair' && day === isoDay()) push.keepDay(source);
+      },
 
       answerCheckIn: (questionId, answer) => {
         const day = isoDay();
         set((s) => ({
           checkIns: { ...s.checkIns, [day]: { ...(s.checkIns[day] ?? {}), [questionId]: answer } },
+          days: s.days[day] ? s.days : { ...s.days, [day]: 'checkin' },
         }));
-        get().markDay('checkin', day);
+        // One RPC records the answer and keeps the day.
+        if (!SAMPLE_MODE) push.checkIn(questionId, answer);
       },
 
       repairYesterday: (paid) => {
@@ -140,25 +153,64 @@ export const useGrowthStore = create<GrowthState>()(
         return true;
       },
 
-      addWatch: (item) =>
+      addWatch: (item) => {
         set((s) =>
           s.watchList.some((w) => w.name === item.name)
             ? s
             : { watchList: [{ ...item, id: `w${Date.now()}` }, ...s.watchList] }
-        ),
+        );
+        const uid = get().userId;
+        if (!SAMPLE_MODE && uid) push.addWatch(uid, item);
+      },
 
-      removeWatch: (id) => set((s) => ({ watchList: s.watchList.filter((w) => w.id !== id) })),
+      removeWatch: (id) => {
+        const item = get().watchList.find((w) => w.id === id);
+        set((s) => ({ watchList: s.watchList.filter((w) => w.id !== id) }));
+        const uid = get().userId;
+        if (!SAMPLE_MODE && uid && item) push.removeWatch(uid, item.name);
+      },
 
-      markHeadsUpSeen: (id) =>
-        set((s) => (s.seenHeadsUp.includes(id) ? s : { seenHeadsUp: [...s.seenHeadsUp, id] })),
+      markHeadsUpSeen: (id) => {
+        set((s) => (s.seenHeadsUp.includes(id) ? s : { seenHeadsUp: [...s.seenHeadsUp, id] }));
+        if (!SAMPLE_MODE) push.headsUpSeen(id);
+      },
 
       resetGrowth: () => set(initial()),
+
+      setEntitlement: (status, trialStartedAt) =>
+        set((s) => ({ entitlement: status, trialStartedAt: trialStartedAt === undefined ? s.trialStartedAt : trialStartedAt })),
+
+      // Server wins for everything it knows. A different user signing in on
+      // the same phone starts from a clean slate.
+      hydrate: async (userId) => {
+        if (SAMPLE_MODE) {
+          set({ userId });
+          return;
+        }
+        if (get().userId && get().userId !== userId) set({ ...initial() });
+        set({ userId });
+        const srv = await pull(userId);
+        if (!srv) return;
+        set((s) => ({
+          hydratedFromServer: true,
+          onboardedAt: srv.onboardedAt ?? s.onboardedAt,
+          answers: srv.answers ?? s.answers,
+          entitlement: srv.entitlement,
+          trialStartedAt: srv.trialStartedAt,
+          days: { ...s.days, ...srv.days },
+          checkIns: { ...s.checkIns, ...srv.checkIns },
+          freeRepairs: srv.freeRepairs,
+          purchasedRepairs: srv.purchasedRepairs,
+          watchList: srv.watchList,
+          joinedWithKeyFrom: srv.joinedWithKeyFrom,
+        }));
+      },
     }),
     {
       name: 'ecopulse.growth.v1',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => {
-        const { setAnswer, finishOnboarding, setPlanMove, startTrial, markDay, answerCheckIn, repairYesterday, addWatch, removeWatch, markHeadsUpSeen, resetGrowth, ...data } = s;
+        const { setAnswer, finishOnboarding, setPlanMove, startTrial, markDay, answerCheckIn, repairYesterday, addWatch, removeWatch, markHeadsUpSeen, resetGrowth, hydrate, setEntitlement, ...data } = s;
         return data;
       },
     }

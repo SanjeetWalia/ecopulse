@@ -33,6 +33,7 @@ import {
 import {
   KindBanner, MealRead, MenuRead, LabelRead, ShelfRead, ReceiptRead, GenericRead, MealReadData, useMealPicks,
 } from '../snap/Reads';
+import { menuFrom, labelFrom, shelfFrom, receiptFrom, receiptProducts, genericFrom } from '../snap/mapResult';
 
 interface SnapResult {
   label: string;
@@ -119,9 +120,19 @@ export default function SnapScreen({ navigation }: any) {
           good: result.good ?? null,
           fewKnow: result.few_know ?? null,
           catch: result.catch ?? null,
-          tip: null,
+          tip: (result as any).tip ?? null,
+          source: (result as any).source ?? undefined,
         };
   const meal = useMealPicks(kind === 'meal' ? mealData : null);
+
+  // Real reads come from the analyze-snap payload; previews use samples.
+  const live = !preview && !!result;
+  const menuData = live ? menuFrom(result) : SAMPLE_MENU;
+  const labelData = live ? labelFrom(result) : SAMPLE_LABEL;
+  const shelfData = live ? shelfFrom(result) : SAMPLE_SHELF;
+  const receiptData = live ? receiptFrom(result) : SAMPLE_RECEIPT;
+  const genericData = live && kind ? genericFrom(kind, result) : null;
+  const unread = live && ((kind === 'menu' && !menuData) || (kind === 'label' && !labelData) || (kind === 'shelf' && !shelfData) || (kind === 'receipt' && !receiptData));
 
   const resetReads = () => {
     setKind(null); setPreview(false); setTipOn(false); setMenuChosen(null);
@@ -135,9 +146,13 @@ export default function SnapScreen({ navigation }: any) {
   };
 
   const changeKind = (k: SnapKind) => {
-    // Backend phase: re-run analyze-snap with the kind forced.
     setKind(k);
-    if (!result) setPreview(true);
+    if (!result) {
+      setPreview(true);
+      return;
+    }
+    // Real snap: read it again as the kind the user picked.
+    if (!SAMPLE_MODE && imageBase64) analyzeImage(imageBase64, undefined, k);
   };
 
   const resetAll = () => {
@@ -190,13 +205,17 @@ export default function SnapScreen({ navigation }: any) {
     }
   };
 
-  const analyzeImage = async (base64: string, correction?: string) => {
+  // v5: analyze-snap reads every kind and resolves the user from their
+  // session. Sample builds keep the v4 function so nothing changes for
+  // testers until the new one is deployed.
+  const analyzeImage = async (base64: string, correction?: string, kindHint?: SnapKind) => {
     setAnalyzing(true); setError(null);
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('analyze-food-photo', {
+      const fn = SAMPLE_MODE ? 'analyze-food-photo' : 'analyze-snap';
+      const { data, error: fnError } = await supabase.functions.invoke(fn, {
         body: correction
-          ? { correction, userId: profile?.id }
-          : { imageBase64: base64, userId: profile?.id },
+          ? { correction, userId: profile?.id, kindHint: kindHint ?? kind ?? undefined }
+          : { imageBase64: base64, userId: profile?.id, kindHint },
       });
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);
@@ -204,6 +223,10 @@ export default function SnapScreen({ navigation }: any) {
 
       setResult(data.result);
       setKind((data.result.kind as SnapKind) ?? (data.result.bill ? 'bill' : 'meal'));
+      if (data.result.label_read) {
+        setLabelFields({ brand: data.result.label_read.brand ?? '', product: data.result.label_read.product ?? '', size: data.result.label_read.size ?? '' });
+      }
+      if (data.result.menu?.restaurant) setRestaurant(data.result.menu.restaurant);
       setPreview(false);
       setActiveChips([]); setContextDelta(0); setContextNotes([]);
       setShowCorrect(false); setCorrectionText('');
@@ -236,11 +259,11 @@ export default function SnapScreen({ navigation }: any) {
   const isBill = !!(result?.bill && result.bill.period_days >= 2);
 
   // Normal single-activity log
-  const logActivity = async () => {
+  const logActivity = async (kgOverride?: number, labelOverride?: string, daySource: 'snap' | 'receipt' = 'snap') => {
     if (!result || !profile?.id || logging) return;
     setLogging(true);
 
-    const finalCo2 = Math.max(0, result.co2_kg + contextDelta);
+    const finalCo2 = Math.max(0, kgOverride ?? result.co2_kg + contextDelta);
     const contextLabel = contextNotes.length > 0 ? ` (${contextNotes.join(', ')})` : '';
 
     const { data, error: insErr } = await supabase
@@ -249,7 +272,8 @@ export default function SnapScreen({ navigation }: any) {
         user_id: profile.id,
         category: result.category,
         activity_type: result.activity_type,
-        label: result.label + contextLabel,
+        label: (labelOverride ?? result.label) + contextLabel,
+        snap_kind: kind,
         amount: finalCo2,
         unit: 'kg',
         co2_kg: finalCo2,
@@ -267,7 +291,7 @@ export default function SnapScreen({ navigation }: any) {
     }
     setLoggedActivityId(data.id);
     invalidateMokoAviCache(profile.id);
-    markDay('snap');
+    markDay(daySource);
   };
 
   // Bill spread: one row per billing day, each carrying its share.
@@ -360,17 +384,20 @@ export default function SnapScreen({ navigation }: any) {
           onPress: () => {
             if (tipOn) setPlanMove('choose_draft', true);
             if (preview || !result) finishLocal();
-            else logActivity();
+            else logActivity(lbTotal / 2.20462);
           },
         };
       }
       case 'menu': {
-        const d = SAMPLE_MENU.dishes.find((x) => x.id === menuChosen);
+        const d = menuData?.dishes.find((x) => x.id === menuChosen);
         return {
           label: d ? `Add ${d.name} · ${d.lb.toFixed(1)} lb` : 'Pick a dish to add it',
           doneLabel: 'Added to your day',
           disabled: !d,
-          onPress: () => finishLocal(),
+          onPress: () => {
+            if (live && d) logActivity(d.lb / 2.20462, `${d.name}${restaurant ? ` · ${restaurant}` : ''}`);
+            else finishLocal();
+          },
         };
       }
       case 'label':
@@ -386,11 +413,15 @@ export default function SnapScreen({ navigation }: any) {
         return { label: 'Save my pick', doneLabel: 'Pick saved', disabled: !shelfPick, onPress: () => finishLocal() };
       case 'receipt':
         return {
-          label: `Add basket to my week · ${SAMPLE_RECEIPT.lines.reduce((t, l) => t + l.lb, 0).toFixed(0)} lb`,
+          label: `Add basket to my week · ${(receiptData?.lines ?? []).reduce((t, l) => t + l.lb, 0).toFixed(0)} lb`,
           doneLabel: 'Basket added, products watched',
+          disabled: !receiptData,
           onPress: () => {
             if (swapOn) setPlanMove('receipt_swap', true);
-            finishLocal('receipt');
+            if (live) {
+              receiptProducts(result).forEach((p) => addWatch({ name: p.name, brand: p.brand, addedFrom: 'receipt' }));
+              logActivity(undefined, undefined, 'receipt');
+            } else finishLocal('receipt');
           },
         };
       case 'bill':
@@ -491,13 +522,16 @@ export default function SnapScreen({ navigation }: any) {
                 <MealRead data={mealData} picks={meal.picks} onPick={meal.setPick} tipOn={tipOn} onTip={setTipOn} />
               )}
               {kind === 'menu' && (
-                <MenuRead data={SAMPLE_MENU} chosen={menuChosen} onChoose={setMenuChosen} restaurant={restaurant} onRestaurant={setRestaurant} />
+                menuData && <MenuRead data={menuData} chosen={menuChosen} onChoose={setMenuChosen} restaurant={restaurant} onRestaurant={setRestaurant} />
               )}
               {kind === 'label' && (
-                <LabelRead data={SAMPLE_LABEL} fields={labelFields} onField={(k, v) => setLabelFields((f) => ({ ...f, [k]: v }))} bought={bought} onBought={setBought} />
+                labelData && <LabelRead data={labelData} fields={labelFields} onField={(k, v) => setLabelFields((f) => ({ ...f, [k]: v }))} bought={bought} onBought={setBought} />
               )}
-              {kind === 'shelf' && <ShelfRead data={SAMPLE_SHELF} pick={shelfPick} onPick={setShelfPick} />}
-              {kind === 'receipt' && <ReceiptRead data={SAMPLE_RECEIPT} swapOn={swapOn} onSwap={setSwapOn} />}
+              {kind === 'shelf' && shelfData && <ShelfRead data={shelfData} pick={shelfPick} onPick={setShelfPick} />}
+              {kind === 'receipt' && receiptData && <ReceiptRead data={receiptData} swapOn={swapOn} onSwap={setSwapOn} />}
+              {unread && (
+                <Text style={s.billTxt}>Couldn’t read enough of this one. Try a closer, flatter photo, or correct it below.</Text>
+              )}
               {kind === 'bill' && isBill && result && (
                 <View>
                   <Text style={s.billTitle}>{result.label}</Text>
@@ -508,7 +542,7 @@ export default function SnapScreen({ navigation }: any) {
                 </View>
               )}
               {(kind === 'fuel' || kind === 'fridge' || kind === 'tag' || kind === 'bin' || (kind === 'bill' && !isBill)) && (
-                <GenericRead kind={kind as 'bill' | 'fuel' | 'fridge' | 'tag' | 'bin'} />
+                <GenericRead kind={kind as 'bill' | 'fuel' | 'fridge' | 'tag' | 'bin'} data={genericData} />
               )}
 
               {!preview && (

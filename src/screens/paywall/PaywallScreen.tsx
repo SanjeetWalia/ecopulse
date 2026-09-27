@@ -16,6 +16,8 @@ import { Screen, Button, Card, Eyebrow, H1, Body, SampleTag } from '../../compon
 import { useGrowthStore } from '../../lib/growthStore';
 import { PRICE_MONTHLY_USD, TRIAL_DAYS, TRIAL_REMINDER_DAY, discountedFirstMonth, priceLabel } from '../../lib/pricing';
 import { SAMPLE_MODE } from '../../lib/sample';
+import { purchasesAvailable, startMonthly, claimHalfMonth, restore } from '../../lib/purchases';
+import { Alert } from 'react-native';
 
 const INCLUDED = [
   ['Every camera read', 'Meals, menus, labels, receipts, bills, and what they give back'],
@@ -26,15 +28,35 @@ const INCLUDED = [
 
 export default function PaywallScreen({ navigation }: any) {
   const startTrial = useGrowthStore((s) => s.startTrial);
+  const setEntitlement = useGrowthStore((s) => s.setEntitlement);
   const keyFrom = useGrowthStore((s) => s.joinedWithKeyFrom);
   const [busy, setBusy] = useState(false);
 
   const start = async () => {
     setBusy(true);
-    // Backend phase: await purchases.purchasePackage(monthlyWithTrial)
-    await new Promise((r) => setTimeout(r, 500));
-    startTrial();
+    if (!purchasesAvailable()) {
+      // Sample mode, Expo Go or web preview: unlock locally.
+      await new Promise((r) => setTimeout(r, 400));
+      startTrial();
+      setBusy(false);
+      return;
+    }
+    const outcome = await startMonthly();
+    if (outcome === 'trial' || outcome === 'active') {
+      // A key's half-price month is a promotional offer redeemed right after
+      // the trial starts, so it lands on the first paid month.
+      if (keyFrom) await claimHalfMonth();
+      setEntitlement(outcome, outcome === 'trial' ? new Date().toISOString() : null);
+    } else if (outcome === 'error') {
+      Alert.alert('That didn’t go through', 'Nothing was charged. Please try again.');
+    }
     setBusy(false);
+  };
+
+  const onRestore = async () => {
+    const outcome = await restore();
+    if (outcome === 'trial' || outcome === 'active') setEntitlement(outcome);
+    else if (outcome !== 'unavailable') Alert.alert('Nothing to restore', 'No active Eco Pulse subscription was found for this Apple ID.');
   };
 
   const firstMonth = keyFrom ? discountedFirstMonth : priceLabel;
@@ -99,7 +121,7 @@ export default function PaywallScreen({ navigation }: any) {
       </View>
 
       <View style={st.links}>
-        <TouchableOpacity onPress={() => {}} accessibilityRole="button">
+        <TouchableOpacity onPress={onRestore} accessibilityRole="button">
           <Text style={st.link}>Restore purchase</Text>
         </TouchableOpacity>
         <Text style={st.link}>·</Text>

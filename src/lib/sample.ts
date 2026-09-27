@@ -11,7 +11,10 @@
 // Nothing here is a sourced fact. Figures are placeholders chosen to have
 // realistic shapes.
 
-export const SAMPLE_MODE = true;
+// On by default. A build that should talk to the real backend sets
+// EXPO_PUBLIC_SAMPLE_MODE=false (eas.json env), after migration 0007 and the
+// v5 functions are deployed and RevenueCat is configured.
+export const SAMPLE_MODE = process.env.EXPO_PUBLIC_SAMPLE_MODE !== 'false';
 
 // ---- chain ----------------------------------------------------------------
 

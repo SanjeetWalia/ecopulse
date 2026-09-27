@@ -395,12 +395,14 @@ export function ReceiptRead({ data, swapOn, onSwap }: { data: ReceiptReadData; s
           <Bar frac={l.lb / max} />
         </View>
       ))}
-      <Card accent style={{ marginTop: 14, paddingVertical: 6 }}>
-        <Eyebrow color={Colors.lime} style={{ marginTop: 6 }}>
-          Next shop
-        </Eyebrow>
-        <ToggleRow title={data.swap.text} meta={`−${data.swap.lb} lb · ${data.swap.usd < 0 ? `−$${Math.abs(data.swap.usd)}` : 'about even'} · add to your plan`} value={swapOn} onChange={onSwap} />
-      </Card>
+      {!!data.swap.text && (
+        <Card accent style={{ marginTop: 14, paddingVertical: 6 }}>
+          <Eyebrow color={Colors.lime} style={{ marginTop: 6 }}>
+            Next shop
+          </Eyebrow>
+          <ToggleRow title={data.swap.text} meta={`−${data.swap.lb} lb · ${data.swap.usd < 0 ? `−$${Math.abs(data.swap.usd)}` : 'about even'} · add to your plan`} value={swapOn} onChange={onSwap} />
+        </Card>
+      )}
       <Text style={st.note}>The products on this receipt join what Heads up watches for recalls.</Text>
     </View>
   );
@@ -408,8 +410,14 @@ export function ReceiptRead({ data, swapOn, onSwap }: { data: ReceiptReadData; s
 
 // ---- bill, fuel, fridge, tag, bin -----------------------------------------------
 
-export function GenericRead({ kind }: { kind: 'bill' | 'fuel' | 'fridge' | 'tag' | 'bin' }) {
-  const d = SAMPLE_GENERIC[kind];
+export function GenericRead({
+  kind,
+  data,
+}: {
+  kind: 'bill' | 'fuel' | 'fridge' | 'tag' | 'bin';
+  data?: { title: string; value: string; unit: string; line: string; rows: { label: string; text: string }[]; asks?: string } | null;
+}) {
+  const d = data ?? SAMPLE_GENERIC[kind];
   return (
     <View>
       <Text style={st.title}>{d.title}</Text>
