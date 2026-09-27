@@ -66,8 +66,8 @@ export const SAMPLE_KEYS: KeyInfo[] = [
 ];
 
 export const SAMPLE_REWARDS = [
-  { id: 'r1', when: '4 days ago', text: 'Sam joined through Arjun. Everyone in your chain got a free streak repair.' },
-  { id: 'r2', when: '12 days ago', text: 'Leah paid her first month. Arjun’s next month is half price.' },
+  { id: 'r1', when: '4 days ago', text: 'Leah paid her first month. Everyone in your chain got a free streak repair.' },
+  { id: 'r2', when: '4 days ago', text: 'Leah used Arjun’s key, so Arjun’s next month is half price.' },
   { id: 'r3', when: '22 days ago', text: 'Priya paid her first month. Your next month was half price.' },
 ];
 

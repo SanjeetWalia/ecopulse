@@ -96,7 +96,7 @@ export default function StreakScreen({ navigation }: any) {
           <Text style={st.repT}>free {freeRepairs === 1 ? 'repair' : 'repairs'} from your chain</Text>
         </View>
         <Body muted style={{ fontSize: 12.5, marginTop: 6 }}>
-          Every time someone new joins your chain, everyone in it gets one. Otherwise a repair is {repairLabel}. A repair can
+          Every time someone new in your chain pays their first month, everyone in it gets one. Otherwise a repair is {repairLabel}. A repair can
           only fix yesterday.
         </Body>
         {purchasedRepairs > 0 && (

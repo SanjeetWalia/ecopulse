@@ -127,3 +127,14 @@ Context: no commits since July 25. `main` is still at build #9/#11 (April 28). `
 - **OBS-035** · ops · **Migration 0006 is local-only.** `supabase migration list` shows 0001-0005 applied remotely, 0006 with a blank remote column. `validate_invite_code` does not exist in production. **This is now a release blocker**: the new WelcomeScreen calls that RPC, so a build shipped before the migration is pushed would break invite validation for every user.
 - **OBS-036** · ops · **No Section N code is deployed.** `observe-facts` does not exist as a function at all. `analyze-activity` is still version 3 from 2026-04-26 and `eco-chat` / `analyze-food-photo` are still at their 2026-07-26 versions, all predating the shared extractor. Everything in Section N is committed and inert.
 - **OBS-037** · ops · Testers on TestFlight are running build #18, which is v3: four tabs, an Air tab, no memory screen, no email signup. Every fix and feature from `v4-retention` is invisible to them.
+
+---
+
+## 2026-09-27 (v5 build session — branch `v5-growth`)
+
+- **X9** · decision · **SUPERSEDED.** "v1 free forever" is replaced by a hard paywall: 7-day free trial, then $10 a month (claude/PRICING-MODEL.md). Current testers can be grandfathered for a year with run-once step 2.
+- **OBS-038** · security · `analyze-food-photo`, `analyze-activity` and `eco-chat` take `userId` from the request body and are deployed with `--no-verify-jwt`. Anyone holding the anon key can pass another user's id and have that user's stored facts injected into the prompt, where the model can repeat them. New functions resolve the caller from the session (`_shared/auth.ts`); `analyze-snap` replaces `analyze-food-photo` once `EXPO_PUBLIC_SAMPLE_MODE=false`. The other two should move to `callerId` next time they are touched.
+- **OBS-039** · bug · The "Add to my day" button on the current Snap screen renders struck through on device (screenshot, 25 Sep). No `textDecorationLine` is set on it in code; only the "share outside" link below it is underlined. Worth checking on the v5 build, where the button text no longer ends in "✓".
+- **OBS-040** · store · Apple applies one offer at a time. The key's half-price month is built as a promotional offer redeemed right after the trial starts, which should land on the first paid month. Confirm in the sandbox; if it lands a month later, the paywall and chain copy need to say "a half-price month".
+- **OBS-041** · data · The USDA FSIS Recall API field names in `recall-sync` could not be verified from the build environment (403). The function logs how many rows it parsed; check the first run.
+- **OBS-042** · data · Plan and check-in factors in `src/lib/plan.ts` are first-pass estimates (fleet mpg, a $3.10 gallon, dairy vs oat per litre). Every figure the plan shows is labelled an estimate; they move into the sourced fact library before launch.
